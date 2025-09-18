@@ -17,5 +17,11 @@ exports.login = async (req, res) => {
   const token = jwt.sign({ openid: wxData.openid }, JWT_SECRET, { expiresIn: '7d' });
   console.log('生成的 session_token：', token);
 
-  res.json({ session_token: token });
+  // 返回 session_token、openid、userInfo 及微信接口返回的全部信息
+  res.json({
+    session_token: token,
+    openid: wxData.openid,
+    userInfo,
+    wxData
+  });
 };
