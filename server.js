@@ -1,3 +1,8 @@
+// 本地开发时加载环境变量，Vercel 部署时会忽略
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const authRoutes = require('./routes/auth');

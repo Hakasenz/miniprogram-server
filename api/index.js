@@ -1,65 +1,77 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const fetch = require('node-fetch');
-const jwt = require('jsonwebtoken');
+const AuthService = require('./services/AuthService');
+const Logger = require('./utils/Logger');
 
 const app = express();
 app.use(bodyParser.json());
 
-const APPID = process.env.APPID;
-const APPSECRET = process.env.APPSECRET;
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+// 创建服务实例
+const authService = new AuthService();
+const logger = new Logger('LoginAPI');
 
 // 登录接口
 app.post('/api/login', async (req, res) => {
-  console.log('=== [LOGIN API] 收到请求 ===');
-  console.log('请求体:', req.body);
+  // 版本标识 - 确认代码版本
+  console.log('🚀 [VERSION CHECK] 新版本代码正在运行 - v2.0 with Logger');
+  console.log('🚀 [VERSION CHECK] Logger 类型:', typeof logger);
+  console.log('🚀 [VERSION CHECK] AuthService 类型:', typeof authService);
+  
+  logger.separator('收到登录请求');
+  logger.data('请求体', req.body);
 
-  const { code, userInfo } = req.body;
+  const { code, avatarUrl, nickName } = req.body;
+  
+  // 验证必需参数
   if (!code) {
-    console.warn('[LOGIN API] 缺少 code');
+    logger.error('缺少必需参数: code');
     return res.status(400).json({ error: '缺少 code' });
   }
 
-  try {
-    console.log('[LOGIN API] 调用微信 jscode2session...');
-    const wxResp = await fetch(
-      `https://api.weixin.qq.com/sns/jscode2session?appid=${APPID}&secret=${APPSECRET}&js_code=${code}&grant_type=authorization_code`
-    );
-    const wxData = await wxResp.json();
-    console.log('[LOGIN API] 微信返回:', wxData);
+  // 组织用户信息对象
+  const userInfo = {
+    nickName: nickName,
+    avatarUrl: avatarUrl
+  };
 
-    if (wxData.errcode) {
-      console.error('[LOGIN API] 微信接口错误:', wxData.errmsg);
-      return res.status(400).json({ error: wxData.errmsg });
+  try {
+    logger.info('开始调用认证服务...');
+    
+    // 环境变量检查
+    logger.info('环境变量检查:');
+    logger.check('APPID', !!process.env.APPID);
+    logger.check('APPSECRET', !!process.env.APPSECRET);
+    logger.check('MONGODB_URI', !!process.env.MONGODB_URI);
+    logger.check('DATABASE_NAME', true, process.env.DATABASE_NAME || 'miniprogram (默认)');
+    
+    // 调用认证服务进行登录
+    const result = await authService.login(code, userInfo);
+    logger.info('认证服务调用完成');
+
+    if (result.success) {
+      logger.success('登录成功，准备返回数据');
+      logger.info('返回数据检查:');
+      logger.check('session_token', !!result.data.session_token);
+      logger.check('user.uuid', true, result.data.user?.uuid || '未知');
+      logger.check('isNewUser', true, result.data.isNewUser);
+      
+      res.json(result.data);
+      logger.success('响应已发送给客户端');
+      logger.complete('登录请求处理完成');
+    } else {
+      logger.error('登录失败');
+      logger.error(`失败原因: ${result.error}`);
+      res.status(400).json({ error: result.error });
+      logger.info('错误响应已发送给客户端');
     }
 
-    // 生成 token
-    const token = jwt.sign({ openid: wxData.openid }, JWT_SECRET, { expiresIn: '7d' });
-    console.log('[LOGIN API] 生成 session_token:', token);
-
-    // 模拟业务数据（可替换为数据库查询）
-    const extraInfo = {
-      userId: 'U' + wxData.openid.slice(0, 6),
-      role: 'member',
-      points: 120,
-      level: 'VIP 2',
-      loginTime: new Date().toISOString()
-    };
-    console.log('[LOGIN API] 返回的额外信息:', extraInfo);
-
-    // 返回给前端
-    res.json({
-      status: 'success',
-      message: '登录成功',
-      session_token: token,
-      ...extraInfo
-    });
-
-    console.log('=== [LOGIN API] 请求处理完成 ===');
   } catch (err) {
-    console.error('[LOGIN API] 服务器异常:', err);
+    logger.error('服务器异常捕获');
+    logger.error('异常类型:', err.name);
+    logger.error('异常信息:', err.message);
+    logger.debug('异常堆栈:', err.stack);
     res.status(500).json({ error: '服务器错误' });
+    logger.info('服务器错误响应已发送');
   }
 });
 
