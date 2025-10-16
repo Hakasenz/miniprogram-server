@@ -13,6 +13,7 @@ const logger = new Logger('LoginAPI');
 // 登录接口
 app.post('/api/login', async (req, res) => {
   logger.separator('收到登录请求');
+  logger.info('代码版本: v2.3 - 每次登录强制更新头像URL（临时地址机制）');
   logger.data('请求体', req.body);
 
   const { code, avatarUrl, nickName } = req.body;
@@ -50,6 +51,9 @@ app.post('/api/login', async (req, res) => {
       logger.check('user.uuid', true, result.data.user?.uuid || '未知');
       logger.check('user.avatar_url', !!result.data.user?.avatar_url, result.data.user?.avatar_url || '无头像');
       logger.check('isNewUser', true, result.data.isNewUser);
+      
+      // 添加完整的返回数据日志以便调试
+      logger.data('完整返回数据结构', result.data);
       
       res.json(result.data);
       logger.success('响应已发送给客户端');

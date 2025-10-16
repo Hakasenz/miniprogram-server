@@ -203,6 +203,86 @@ class AuthService {
   }
 
   /**
+   * 更新现有用户信息（每次登录强制更新头像URL）
+   */
+  async updateUserInfo(openid, userInfo, existingUser) {
+    this.logger.info(`开始强制更新用户信息: openid=${openid}`);
+    this.logger.data('传入的用户信息', userInfo);
+    this.logger.info(`现有头像URL: ${existingUser.avatar_url || '无'}`);
+    
+    if (!this.db) {
+      this.logger.error('数据库未连接，仅在返回对象中更新');
+      // 至少更新返回对象中的信息
+      if (userInfo?.avatarUrl) {
+        this.logger.info(`临时更新头像: ${userInfo.avatarUrl}`);
+        existingUser.avatar_url = userInfo.avatarUrl;
+      }
+      if (userInfo?.nickName) {
+        existingUser.username = userInfo.nickName;
+        existingUser.wechat_name = userInfo.nickName;
+        this.logger.info(`临时更新昵称: ${userInfo.nickName}`);
+      }
+      existingUser.updated_at = new Date();
+      return existingUser;
+    }
+
+    try {
+      // 构建更新字段 - 每次都更新时间戳
+      const updateFields = {
+        updated_at: new Date()
+      };
+      
+      // 强制更新头像URL（临时地址特性）
+      if (userInfo?.avatarUrl) {
+        updateFields.avatar_url = userInfo.avatarUrl;
+        this.logger.success(`✓ 头像URL将被更新: ${userInfo.avatarUrl}`);
+      } else {
+        this.logger.warn('⚠ 前端未传入头像URL，跳过头像更新');
+      }
+      
+      // 更新昵称（如果有）
+      if (userInfo?.nickName) {
+        updateFields.username = userInfo.nickName;
+        updateFields.wechat_name = userInfo.nickName;
+        this.logger.success(`✓ 昵称将被更新: ${userInfo.nickName}`);
+      }
+      
+      this.logger.data('待更新字段', updateFields);
+      
+      // 执行数据库更新（每次登录都更新时间戳）
+      this.logger.database('UPDATE', 'db.users.updateOne({ wechat_id: "..." }, { $set: {...} })');
+      const result = await this.db.collection('users').updateOne(
+        { wechat_id: openid },
+        { $set: updateFields }
+      );
+      
+      if (result.matchedCount > 0) {
+        this.logger.success(`数据库操作成功！匹配: ${result.matchedCount}, 修改: ${result.modifiedCount}`);
+        
+        // 获取更新后的用户信息
+        const updatedUser = await this.db.collection('users').findOne({ wechat_id: openid });
+        this.logger.data('最终用户对象', updatedUser);
+        this.logger.success(`✓ 当前头像URL: ${updatedUser.avatar_url || '无头像'}`);
+        return updatedUser;
+      } else {
+        this.logger.error('数据库更新失败：未找到匹配的用户记录');
+        return existingUser;
+      }
+      
+    } catch (error) {
+      this.logger.error('更新用户信息失败:', error.message);
+      this.logger.error('错误详情:', error);
+      // 发生错误时，至少在内存中更新返回的对象
+      if (userInfo?.avatarUrl) existingUser.avatar_url = userInfo.avatarUrl;
+      if (userInfo?.nickName) {
+        existingUser.username = userInfo.nickName;
+        existingUser.wechat_name = userInfo.nickName;
+      }
+      return existingUser;
+    }
+  }
+
+  /**
    * 解析微信性别字段
    */
   parseGender(genderCode) {
@@ -257,6 +337,11 @@ class AuthService {
       } else {
         this.logger.info(`现有用户登录: ${user.uuid} (${user.username})`);
         this.logger.info(`用户注册时间: ${user.created_at}`);
+        
+        // 每次登录都强制更新头像URL（因为是临时地址）
+        this.logger.info('强制更新用户头像URL（临时地址机制）...');
+        user = await this.updateUserInfo(wxData.openid, userInfo, user);
+        this.logger.success('用户信息强制更新完成');
       }
 
       // 4. 生成 JWT token
@@ -279,6 +364,8 @@ class AuthService {
       this.logger.success('响应数据构建完成');
       this.logger.info(`用户类型: ${isNewUser ? '新用户' : '老用户'}`);
       this.logger.info(`用户ID: ${user.uuid}`);
+      this.logger.data('完整用户对象', user);
+      this.logger.data('最终响应数据', responseData);
       this.logger.endFlow('用户登录', true);
 
       return {
