@@ -12,11 +12,6 @@ const logger = new Logger('LoginAPI');
 
 // 登录接口
 app.post('/api/login', async (req, res) => {
-  // 版本标识 - 确认代码版本
-  console.log('🚀 [VERSION CHECK] 新版本代码正在运行 - v2.0 with Logger');
-  console.log('🚀 [VERSION CHECK] Logger 类型:', typeof logger);
-  console.log('🚀 [VERSION CHECK] AuthService 类型:', typeof authService);
-  
   logger.separator('收到登录请求');
   logger.data('请求体', req.body);
 
@@ -53,6 +48,7 @@ app.post('/api/login', async (req, res) => {
       logger.info('返回数据检查:');
       logger.check('session_token', !!result.data.session_token);
       logger.check('user.uuid', true, result.data.user?.uuid || '未知');
+      logger.check('user.avatar_url', !!result.data.user?.avatar_url, result.data.user?.avatar_url || '无头像');
       logger.check('isNewUser', true, result.data.isNewUser);
       
       res.json(result.data);

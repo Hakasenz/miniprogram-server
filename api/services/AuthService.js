@@ -156,6 +156,7 @@ class AuthService {
         position: '',
         wechat_id: openid,
         wechat_name: userInfo?.nickName || '',
+        avatar_url: userInfo?.avatarUrl || '',
         company_id: '',
         created_at: new Date()
       };
@@ -175,6 +176,7 @@ class AuthService {
         position: '',
         wechat_id: openid,
         wechat_name: userInfo?.nickName || '',
+        avatar_url: userInfo?.avatarUrl || '',
         company_id: '',
         created_at: new Date()
       };
