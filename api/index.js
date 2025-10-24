@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const AuthService = require('../services/AuthService');
-const Logger = require('../utils/Logger');
+const AuthService = require('./services/AuthService');
+const Logger = require('./utils/Logger');
 
 const app = express();
 app.use(bodyParser.json());
