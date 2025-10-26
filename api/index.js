@@ -172,20 +172,33 @@ app.post('/api/project', async (req, res) => {
   const queryLogger = new Logger('ProjectQueryAPI');
   
   queryLogger.separator('收到项目查询请求');
-  queryLogger.info('API版本: v1.0 - 查询用户领导的项目');
+  queryLogger.info('API版本: v2.0 - 支持新的请求体格式');
   queryLogger.info(`请求时间: ${new Date().toISOString()}`);
   queryLogger.data('请求体', req.body);
 
-  const { uuid } = req.body;
+  const { id, name, role, people, group, uuid, submitTime } = req.body;
 
   // 验证必需参数
-  if (!uuid) {
-    queryLogger.error('缺少必需参数: uuid');
+  const missingFields = [];
+  if (!uuid) missingFields.push('uuid');
+
+  if (missingFields.length > 0) {
+    queryLogger.error(`缺少必需参数: ${missingFields.join(', ')}`);
     return res.status(400).json({ 
       error: '缺少必需参数',
-      missing_fields: ['uuid']
+      missing_fields: missingFields 
     });
   }
+
+  // 记录接收到的完整数据
+  queryLogger.info('接收到的项目数据:');
+  queryLogger.check('id', !!id, id);
+  queryLogger.check('name', !!name, name);
+  queryLogger.check('role', !!role, role);
+  queryLogger.check('people', !!people, people);
+  queryLogger.check('group', !!group, group);
+  queryLogger.check('uuid', !!uuid, uuid);
+  queryLogger.check('submitTime', !!submitTime, submitTime);
 
   try {
     queryLogger.info('开始调用项目查询服务...');
@@ -203,6 +216,15 @@ app.post('/api/project', async (req, res) => {
       const responseData = {
         status: 'success',
         message: '项目查询成功',
+        request_data: {
+          id: id,
+          name: name,
+          role: role,
+          people: people,
+          group: group,
+          uuid: uuid,
+          submitTime: submitTime
+        },
         data: {
           leader_uuid: uuid,
           project_count: result.data.length,
@@ -225,7 +247,16 @@ app.post('/api/project', async (req, res) => {
       
       res.status(400).json({ 
         error: result.error,
-        details: result.details || []
+        details: result.details || [],
+        request_data: {
+          id: id,
+          name: name,
+          role: role,
+          people: people,
+          group: group,
+          uuid: uuid,
+          submitTime: submitTime
+        }
       });
       queryLogger.info('错误响应已发送给客户端');
     }
@@ -235,8 +266,108 @@ app.post('/api/project', async (req, res) => {
     queryLogger.error('异常类型:', err.name);
     queryLogger.error('异常信息:', err.message);
     queryLogger.debug('异常堆栈:', err.stack);
-    res.status(500).json({ error: '服务器错误' });
+    res.status(500).json({ 
+      error: '服务器错误',
+      request_data: {
+        id: id,
+        name: name,
+        role: role,
+        people: people,
+        group: group,
+        uuid: uuid,
+        submitTime: submitTime
+      }
+    });
     queryLogger.info('服务器错误响应已发送');
+  }
+});
+
+// 根据UUID查询用户领导的项目接口
+app.post('/api/project/leader', async (req, res) => {
+  const leaderQueryLogger = new Logger('ProjectLeaderAPI');
+  
+  leaderQueryLogger.separator('收到领导者项目查询请求');
+  leaderQueryLogger.info('API版本: v1.0 - 根据UUID查询领导的项目');
+  leaderQueryLogger.info(`请求时间: ${new Date().toISOString()}`);
+  leaderQueryLogger.data('请求体', req.body);
+
+  const { uuid } = req.body;
+
+  // 验证必需参数
+  if (!uuid) {
+    leaderQueryLogger.error('缺少必需参数: uuid');
+    return res.status(400).json({ 
+      error: '缺少必需参数',
+      missing_fields: ['uuid']
+    });
+  }
+
+  leaderQueryLogger.info(`查询领导者UUID: ${uuid}`);
+
+  try {
+    leaderQueryLogger.info('开始调用项目查询服务...');
+    
+    // 调用项目服务查询数据
+    const result = await projectService.getProjectsByLeader(uuid);
+    leaderQueryLogger.info('项目查询服务调用完成');
+
+    if (result.success) {
+      leaderQueryLogger.success('领导者项目查询成功');
+      leaderQueryLogger.info('返回数据检查:');
+      leaderQueryLogger.check('查询UUID', true, uuid);
+      leaderQueryLogger.check('项目数量', true, `${result.data.length} 个项目`);
+      
+      // 记录每个项目的基本信息
+      if (result.data.length > 0) {
+        leaderQueryLogger.info('找到的项目列表:');
+        result.data.forEach((project, index) => {
+          leaderQueryLogger.info(`  ${index + 1}. ${project.name || '未命名项目'} (ID: ${project.project_id || 'N/A'})`);
+        });
+      } else {
+        leaderQueryLogger.info('该用户不是任何项目的领导者');
+      }
+      
+      const responseData = {
+        status: 'success',
+        message: '领导者项目查询成功',
+        data: {
+          leader_uuid: uuid,
+          project_count: result.data.length,
+          projects: result.data
+        }
+      };
+      
+      // 记录完整的响应体用于调试
+      leaderQueryLogger.data('完整响应体', responseData);
+      
+      res.json(responseData);
+      leaderQueryLogger.success('响应已发送给客户端');
+      leaderQueryLogger.complete('领导者项目查询处理完成');
+    } else {
+      leaderQueryLogger.error('领导者项目查询失败');
+      leaderQueryLogger.error(`失败原因: ${result.error}`);
+      if (result.details) {
+        leaderQueryLogger.error('详细信息:', result.details);
+      }
+      
+      res.status(400).json({ 
+        error: result.error,
+        details: result.details || [],
+        leader_uuid: uuid
+      });
+      leaderQueryLogger.info('错误响应已发送给客户端');
+    }
+
+  } catch (err) {
+    leaderQueryLogger.error('服务器异常捕获');
+    leaderQueryLogger.error('异常类型:', err.name);
+    leaderQueryLogger.error('异常信息:', err.message);
+    leaderQueryLogger.debug('异常堆栈:', err.stack);
+    res.status(500).json({ 
+      error: '服务器错误',
+      leader_uuid: uuid
+    });
+    leaderQueryLogger.info('服务器错误响应已发送');
   }
 });
 
