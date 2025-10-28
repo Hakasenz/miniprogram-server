@@ -433,6 +433,124 @@ class ProjectController {
       deleteLogger.info('服务器错误响应已发送');
     }
   }
+
+  /**
+   * 项目更新接口
+   */
+  async updateProject(req, res) {
+    const updateLogger = new Logger('ProjectUpdateAPI');
+    
+    updateLogger.separator('收到项目更新请求');
+    updateLogger.info('API版本: v1.0 - 项目信息更新');
+    updateLogger.info(`请求时间: ${new Date().toISOString()}`);
+    updateLogger.data('请求体', req.body);
+
+    const { project_id, uuid, name, group, people } = req.body;
+
+    // 验证必需参数
+    const missingFields = [];
+    if (!project_id || project_id.trim() === '') missingFields.push('project_id');
+    if (!uuid || uuid.trim() === '') missingFields.push('uuid');
+
+    if (missingFields.length > 0) {
+      updateLogger.error(`缺少必需参数: ${missingFields.join(', ')}`);
+      return res.status(400).json({ 
+        error: '缺少必需参数',
+        missing_fields: missingFields 
+      });
+    }
+
+    // 检查是否有要更新的字段
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (group !== undefined) updateData.group = group;
+    if (people !== undefined) updateData.people = people;
+
+    if (Object.keys(updateData).length === 0) {
+      updateLogger.error('没有提供要更新的字段');
+      return res.status(400).json({ 
+        error: '没有要更新的字段',
+        details: ['至少需要提供一个要更新的字段(name, group, people)']
+      });
+    }
+
+    // 记录接收到的完整数据
+    updateLogger.info('接收到的更新数据:');
+    updateLogger.check('project_id', !!project_id, project_id);
+    updateLogger.check('uuid', !!uuid, uuid);
+    updateLogger.check('name', name !== undefined, name);
+    updateLogger.check('group', group !== undefined, group);
+    updateLogger.check('people', people !== undefined, people);
+
+    try {
+      updateLogger.info('开始调用项目更新服务...');
+      
+      // 调用项目服务更新数据
+      const result = await this.projectService.updateProject(project_id, uuid, updateData);
+      updateLogger.info('项目更新服务调用完成');
+
+      if (result.success) {
+        updateLogger.success('项目更新成功');
+        updateLogger.info('返回数据检查:');
+        updateLogger.check('项目ID', true, result.data.project_id);
+        updateLogger.check('更新时间', true, result.data.updated_at);
+        
+        const responseData = {
+          status: 'success',
+          message: '项目更新成功',
+          request_data: {
+            project_id: project_id,
+            uuid: uuid,
+            update_fields: updateData
+          },
+          data: {
+            project_id: result.data.project_id,
+            updated_project: result.data
+          }
+        };
+        
+        // 记录完整的响应体用于调试
+        updateLogger.data('完整响应体', responseData);
+        
+        res.json(responseData);
+        updateLogger.success('响应已发送给客户端');
+
+      } else {
+        updateLogger.error('项目更新失败');
+        updateLogger.error('失败原因:', result.error);
+        updateLogger.error('详细信息:', result.details);
+        
+        res.status(400).json({
+          status: 'error',
+          message: '项目更新失败',
+          error: result.error,
+          details: result.details || [],
+          request_data: {
+            project_id: project_id,
+            uuid: uuid,
+            update_fields: updateData
+          }
+        });
+        updateLogger.info('错误响应已发送给客户端');
+      }
+
+    } catch (err) {
+      updateLogger.error('服务器异常捕获');
+      updateLogger.error('异常类型:', err.name);
+      updateLogger.error('异常信息:', err.message);
+      updateLogger.debug('异常堆栈:', err.stack);
+      res.status(500).json({ 
+        error: '服务器错误',
+        message: '更新过程中发生服务器异常',
+        request_data: {
+          project_id: project_id,
+          uuid: uuid,
+          update_fields: updateData
+        }
+      });
+      updateLogger.info('服务器错误响应已发送');
+    }
+  }
 }
 
 module.exports = ProjectController;

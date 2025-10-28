@@ -24,4 +24,9 @@ router.post('/delete', (req, res) => {
   projectController.deleteProject(req, res);
 });
 
+// 项目更新接口
+router.post('/update', (req, res) => {
+  projectController.updateProject(req, res);
+});
+
 module.exports = router;
