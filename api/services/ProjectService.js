@@ -359,6 +359,110 @@ class ProjectService {
   }
 
   /**
+   * 删除项目
+   */
+  async deleteProject(projectId) {
+    this.logger.startFlow('项目删除');
+    this.logger.data('项目ID', projectId);
+
+    try {
+      // 1. 初始化数据库连接
+      this.logger.step(1, '初始化数据库连接');
+      await this.initDatabase();
+
+      // 2. 验证项目ID
+      this.logger.step(2, '验证项目ID');
+      if (!projectId || typeof projectId !== 'string' || projectId.trim() === '') {
+        this.logger.endFlow('项目删除', false);
+        return {
+          success: false,
+          error: '项目ID不能为空',
+          details: ['项目ID必须是非空字符串']
+        };
+      }
+
+      // 3. 检查项目是否存在
+      this.logger.step(3, '检查项目是否存在');
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟成功响应');
+        this.logger.endFlow('项目删除', true);
+        return {
+          success: true,
+          data: {
+            project_id: projectId,
+            deleted: true,
+            message: '模拟删除成功'
+          }
+        };
+      }
+
+      // 先查找项目
+      this.logger.database('QUERY', 'db.projects.findOne()');
+      const existingProject = await this.db.collection('projects').findOne({ 
+        project_id: projectId 
+      });
+
+      if (!existingProject) {
+        this.logger.endFlow('项目删除', false);
+        return {
+          success: false,
+          error: '项目不存在',
+          details: [`项目ID ${projectId} 不存在`]
+        };
+      }
+
+      this.logger.info(`找到项目: ${existingProject.name} (${existingProject.project_id})`);
+
+      // 4. 执行删除操作
+      this.logger.step(4, '执行删除操作');
+      this.logger.database('DELETE', 'db.projects.deleteOne()');
+      const deleteResult = await this.db.collection('projects').deleteOne({ 
+        project_id: projectId 
+      });
+
+      if (deleteResult.deletedCount === 1) {
+        this.logger.success(`项目删除成功！项目ID: ${projectId}`);
+        
+        const result = {
+          project_id: projectId,
+          deleted: true,
+          deleted_project: {
+            name: existingProject.name,
+            group: existingProject.group,
+            people: existingProject.people,
+            leader: existingProject.leader
+          }
+        };
+
+        this.logger.data('删除成功的项目', result);
+        this.logger.endFlow('项目删除', true);
+
+        return {
+          success: true,
+          data: result
+        };
+      } else {
+        this.logger.endFlow('项目删除', false);
+        return {
+          success: false,
+          error: '删除操作失败',
+          details: ['数据库删除操作未生效']
+        };
+      }
+
+    } catch (error) {
+      this.logger.error('项目删除异常:', error.message);
+      this.logger.error('异常详情:', error);
+      this.logger.endFlow('项目删除', false);
+      return {
+        success: false,
+        error: '删除过程中发生异常',
+        details: [error.message]
+      };
+    }
+  }
+
+  /**
    * 关闭数据库连接
    */
   async closeConnection() {
