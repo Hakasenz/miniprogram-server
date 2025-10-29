@@ -568,9 +568,24 @@ class ProjectService {
       }
 
       this.logger.database('QUERY', 'db.projects.findOne()');
+      this.logger.info(`查询条件详情: { project_id: "${projectId}" }`);
+      this.logger.info(`project_id 类型: ${typeof projectId}, 长度: ${projectId.length}`);
+      
       const existingProject = await this.db.collection('projects').findOne({
         project_id: projectId
       });
+
+      this.logger.info(`查询结果: ${existingProject ? '找到项目' : '未找到项目'}`);
+      if (existingProject) {
+        this.logger.info(`找到的项目: ${existingProject.name} (ID: ${existingProject.project_id})`);
+        this.logger.info(`数据库中的 project_id 类型: ${typeof existingProject.project_id}`);
+        this.logger.info(`project_id 比较: "${projectId}" === "${existingProject.project_id}" = ${projectId === existingProject.project_id}`);
+      } else {
+        // 尝试查询所有项目的project_id来调试
+        this.logger.warn('项目未找到，查询所有项目的 project_id 进行调试...');
+        const allProjects = await this.db.collection('projects').find({}, { projection: { project_id: 1, name: 1 } }).limit(5).toArray();
+        this.logger.data('数据库中的项目列表（前5个）', allProjects);
+      }
 
       if (!existingProject) {
         this.logger.endFlow('项目更新', false);
@@ -598,36 +613,79 @@ class ProjectService {
       this.logger.step(6, '执行更新操作');
       updateFields.updated_at = new Date();
       
-      this.logger.database('UPDATE', 'db.projects.findOneAndUpdate()');
+      this.logger.database('UPDATE', 'db.projects.updateOne()');
       this.logger.data('更新字段', updateFields);
+      this.logger.data('查询条件', { project_id: projectId });
+      this.logger.info(`更新操作详情:`);
+      this.logger.info(`- 集合: projects`);
+      this.logger.info(`- 查询条件: { project_id: "${projectId}" }`);
+      this.logger.info(`- 更新字段数量: ${Object.keys(updateFields).length}`);
       
-      const updateResult = await this.db.collection('projects').findOneAndUpdate(
+      // 先尝试使用 updateOne 进行更新
+      const updateResult = await this.db.collection('projects').updateOne(
         { project_id: projectId },
-        { $set: updateFields },
-        { returnDocument: 'after' }
+        { $set: updateFields }
       );
 
-      if (!updateResult.value) {
+      this.logger.data('updateOne 完整结果', updateResult);
+      this.logger.info(`更新统计详情:`);
+      this.logger.info(`- 匹配文档数: ${updateResult.matchedCount}`);
+      this.logger.info(`- 修改文档数: ${updateResult.modifiedCount}`);
+      this.logger.info(`- 确认: ${updateResult.acknowledged}`);
+      this.logger.info(`- 操作ID: ${updateResult.upsertedId || 'N/A'}`);
+
+      if (updateResult.matchedCount === 0) {
+        this.logger.error('更新失败: 没有找到匹配的项目');
+        this.logger.error(`查询条件 { project_id: "${projectId}" } 没有匹配任何文档`);
+        
+        // 再次尝试查找项目进行调试
+        this.logger.info('进行二次查询确认项目是否存在...');
+        const doubleCheck = await this.db.collection('projects').findOne({ project_id: projectId });
+        this.logger.info(`二次查询结果: ${doubleCheck ? '项目存在' : '项目不存在'}`);
+        
         this.logger.endFlow('项目更新', false);
         return {
           success: false,
-          error: '更新操作失败',
-          details: ['数据库更新操作未生效']
+          error: '项目不存在',
+          details: [
+            `没有找到项目ID为 ${projectId} 的项目`,
+            `匹配文档数: ${updateResult.matchedCount}`,
+            `二次查询结果: ${doubleCheck ? '存在' : '不存在'}`
+          ]
+        };
+      }
+
+      if (updateResult.modifiedCount === 0) {
+        this.logger.warn('更新操作没有修改任何数据（可能数据相同）');
+      }
+
+      // 查询更新后的项目数据
+      this.logger.database('QUERY', 'db.projects.findOne() - 获取更新后数据');
+      const updatedProject = await this.db.collection('projects').findOne({ project_id: projectId });
+
+      if (!updatedProject) {
+        this.logger.error('更新后查询项目失败');
+        this.logger.endFlow('项目更新', false);
+        return {
+          success: false,
+          error: '更新后查询失败',
+          details: ['项目更新成功但无法获取更新后的数据']
         };
       }
 
       this.logger.success(`项目更新成功！项目ID: ${projectId}`);
       this.logger.info('更新后的项目信息:');
-      this.logger.info(`  名称: ${updateResult.value.name}`);
-      this.logger.info(`  组别: ${updateResult.value.group}`);
-      this.logger.info(`  人数: ${updateResult.value.people}`);
+      this.logger.info(`  名称: ${updatedProject.name}`);
+      this.logger.info(`  组别: ${updatedProject.group}`);
+      this.logger.info(`  人数: ${updatedProject.people}`);
+      this.logger.info(`  更新时间: ${updatedProject.updated_at}`);
       
-      this.logger.data('更新后的完整项目', updateResult.value);
+      this.logger.data('更新后的完整项目', updatedProject);
       this.logger.endFlow('项目更新', true);
 
       return {
         success: true,
-        data: updateResult.value
+        data: updatedProject
       };
 
     } catch (error) {
