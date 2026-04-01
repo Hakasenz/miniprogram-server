@@ -29,4 +29,14 @@ router.post('/update', (req, res) => {
   projectController.updateProject(req, res);
 });
 
+// 邀请码查询接口 ⭐ 新增
+router.post('/invite', (req, res) => {
+  projectController.getProjectByInviteCode(req, res);
+});
+
+// 生成邀请码接口 ⭐ 新增
+router.post('/generate-invite', (req, res) => {
+  projectController.generateInviteCode(req, res);
+});
+
 module.exports = router;

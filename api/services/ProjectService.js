@@ -107,14 +107,97 @@ class ProjectService {
   }
 
   /**
-   * 生成项目ID
+   * 生成项目 ID
    */
   generateProjectId() {
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     const projectId = `proj-${timestamp}-${randomSuffix}`;
-    this.logger.info(`生成项目ID: ${projectId}`);
+    this.logger.info(`生成项目 ID: ${projectId}`);
     return projectId;
+  }
+
+  /**
+   * 为指定项目生成或更新邀请码
+   * @param {string} projectId - 项目 ID
+   * @returns {Promise<Object>} 包含成功状态和邀请码
+   */
+  async generateOrUpdateInviteCode(projectId) {
+    this.logger.startFlow('生成项目邀请码');
+    this.logger.info(`项目 ID: ${projectId}`);
+
+    try {
+      // 1. 初始化数据库连接
+      await this.initDatabase();
+
+      // 2. 验证项目是否存在
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟邀请码');
+        const mockInviteCode = this.generateInviteCode();
+        return {
+          success: true,
+          invite_code: mockInviteCode,
+          message: '模拟模式下生成成功'
+        };
+      }
+
+      // 3. 检查项目是否存在
+      const project = await this.db.collection('projects').findOne({ project_id: projectId });
+      
+      if (!project) {
+        this.logger.error(`项目不存在：${projectId}`);
+        return {
+          success: false,
+          error: '项目不存在',
+          code: 'PROJECT_NOT_FOUND'
+        };
+      }
+
+      // 4. 生成唯一邀请码
+      const inviteCode = await this.generateUniqueInviteCode();
+      this.logger.success(`生成新邀请码：${inviteCode}`);
+
+      // 5. 更新数据库
+      this.logger.database('UPDATE', `db.projects.updateOne({ project_id: "${projectId}" }, { $set: { invite_code: "${inviteCode}" } })`);
+      
+      const updateResult = await this.db.collection('projects').updateOne(
+        { project_id: projectId },
+        { $set: { invite_code: inviteCode } }
+      );
+
+      if (updateResult.modifiedCount > 0 || updateResult.matchedCount > 0) {
+        this.logger.success(`邀请码更新成功！项目：${project.name}`);
+        this.logger.data('更新结果', {
+          project_id: projectId,
+          invite_code: inviteCode,
+          modified_count: updateResult.modifiedCount
+        });
+
+        return {
+          success: true,
+          invite_code: inviteCode,
+          project_name: project.name,
+          message: '邀请码生成成功'
+        };
+      } else {
+        this.logger.error('邀请码更新失败：未找到匹配的项目');
+        return {
+          success: false,
+          error: '更新失败',
+          code: 'UPDATE_FAILED'
+        };
+      }
+
+    } catch (error) {
+      this.logger.error('生成邀请码异常:', error.message);
+      this.logger.error('错误详情:', error);
+      
+      return {
+        success: false,
+        error: '服务器内部错误',
+        details: error.message
+      };
+    }
   }
 
   /**

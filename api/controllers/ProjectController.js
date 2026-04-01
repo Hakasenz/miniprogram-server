@@ -551,6 +551,163 @@ class ProjectController {
       updateLogger.info('服务器错误响应已发送');
     }
   }
+
+  /**
+   * 通过邀请码查询项目接口
+   */
+  async getProjectByInviteCode(req, res) {
+    const inviteLogger = new Logger('ProjectInviteAPI');
+    
+    inviteLogger.separator('收到邀请码查询请求');
+    inviteLogger.info(`请求时间：${new Date().toISOString()}`);
+    inviteLogger.data('请求体', req.body);
+
+    const { inviteCode } = req.body;
+
+    // 验证必需参数
+    if (!inviteCode || inviteCode.trim() === '') {
+      inviteLogger.error('缺少必需参数：inviteCode');
+      return res.status(400).json({ 
+        status: 'error',
+        error: '缺少必需参数',
+        missing_fields: ['inviteCode']
+      });
+    }
+
+    try {
+      inviteLogger.info('开始调用邀请码查询服务...');
+      
+      // 调用项目服务查询数据
+      const result = await this.projectService.getProjectByInviteCode(inviteCode.trim());
+      inviteLogger.info('邀请码查询服务调用完成');
+
+      if (result.success) {
+        inviteLogger.success('邀请码查询成功');
+        
+        const responseData = {
+          status: 'success',
+          message: '项目查询成功',
+          data: {
+            invite_code: inviteCode,
+            project: result.data
+          }
+        };
+        
+        // 记录完整的响应体用于调试
+        inviteLogger.data('完整响应体', responseData);
+        
+        res.json(responseData);
+        inviteLogger.success('响应已发送给客户端');
+
+      } else {
+        inviteLogger.warn('邀请码查询失败');
+        inviteLogger.warn('失败原因:', result.error);
+        
+        res.status(404).json({
+          status: 'error',
+          message: result.error || '邀请码不存在',
+          error: result.error
+        });
+        inviteLogger.info('错误响应已发送给客户端');
+      }
+
+    } catch (err) {
+      inviteLogger.error('服务器异常捕获');
+      inviteLogger.error('异常类型:', err.name);
+      inviteLogger.error('异常消息:', err.message);
+      inviteLogger.debug('异常堆栈:', err.stack);
+      res.status(500).json({ 
+        error: '服务器错误',
+        message: '查询过程中发生服务器异常',
+        details: err.message
+      });
+      inviteLogger.info('服务器错误响应已发送');
+    }
+  }
+
+  /**
+   * 生成项目邀请码接口 ⭐ 新增
+   */
+  async generateInviteCode(req, res) {
+    const genLogger = new Logger('GenerateInviteCodeAPI');
+    
+    genLogger.separator('收到生成邀请码请求');
+    genLogger.info(`请求时间：${new Date().toISOString()}`);
+    genLogger.data('请求体', req.body);
+
+    const { project_id, uuid } = req.body;
+
+    // 验证必需参数
+    if (!project_id || project_id.trim() === '') {
+      genLogger.error('缺少必需参数：project_id');
+      return res.status(400).json({ 
+        status: 'error',
+        error: '缺少必需参数',
+        missing_fields: ['project_id']
+      });
+    }
+
+    if (!uuid || uuid.trim() === '') {
+      genLogger.error('缺少必需参数：uuid');
+      return res.status(400).json({ 
+        status: 'error',
+        error: '缺少必需参数',
+        missing_fields: ['uuid']
+      });
+    }
+
+    try {
+      genLogger.info('开始调用邀请码生成服务...');
+      
+      // 调用项目服务生成邀请码
+      const result = await this.projectService.generateOrUpdateInviteCode(project_id);
+      genLogger.info('邀请码生成服务调用完成');
+
+      if (result.success) {
+        genLogger.success('邀请码生成成功');
+        
+        const responseData = {
+          status: 'success',
+          message: '邀请码生成成功',
+          data: {
+            project_id: project_id,
+            invite_code: result.invite_code,
+            project_name: result.project_name
+          }
+        };
+        
+        // 记录完整的响应体用于调试
+        genLogger.data('完整响应体', responseData);
+        
+        res.json(responseData);
+        genLogger.success('响应已发送给客户端');
+
+      } else {
+        genLogger.error('邀请码生成失败');
+        genLogger.error('失败原因:', result.error);
+        
+        res.status(400).json({
+          status: 'error',
+          message: result.error || '邀请码生成失败',
+          error: result.error,
+          code: result.code
+        });
+        genLogger.info('错误响应已发送给客户端');
+      }
+
+    } catch (err) {
+      genLogger.error('服务器异常捕获');
+      genLogger.error('异常类型:', err.name);
+      genLogger.error('异常消息:', err.message);
+      genLogger.debug('异常堆栈:', err.stack);
+      res.status(500).json({ 
+        error: '服务器错误',
+        message: '生成过程中发生服务器异常',
+        details: err.message
+      });
+      genLogger.info('服务器错误响应已发送');
+    }
+  }
 }
 
 module.exports = ProjectController;
