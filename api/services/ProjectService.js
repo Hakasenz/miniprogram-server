@@ -118,6 +118,44 @@ class ProjectService {
   }
 
   /**
+   * 生成 6 位随机邀请码
+   * @returns {string} 6 位邀请码
+   */
+  generateInviteCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 排除 I、O、0、1
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    this.logger.info(`生成邀请码：${code}`);
+    return code;
+  }
+
+  /**
+   * 生成唯一的 6 位邀请码（确保不重复）
+   * @returns {Promise<string>} 唯一的 6 位邀请码
+   */
+  async generateUniqueInviteCode() {
+    const maxRetries = 10;
+    
+    for (let i = 0; i < maxRetries; i++) {
+      const inviteCode = this.generateInviteCode();
+      
+      // 检查是否已存在
+      const existing = await this.db.collection('projects').findOne({ invite_code: inviteCode });
+      
+      if (!existing) {
+        this.logger.success(`生成唯一邀请码：${inviteCode}`);
+        return inviteCode;
+      }
+      
+      this.logger.warn(`邀请码 ${inviteCode} 已存在，重新生成... (${i + 1}/${maxRetries})`);
+    }
+    
+    throw new Error(`无法生成唯一邀请码，已重试 ${maxRetries} 次`);
+  }
+
+  /**
    * 为指定项目生成或更新邀请码
    * @param {string} projectId - 项目 ID
    * @returns {Promise<Object>} 包含成功状态和邀请码
@@ -268,8 +306,12 @@ class ProjectService {
       this.logger.step(4, '构建项目文档');
       const projectId = this.generateProjectId();
       
+      // ⭐ 自动为项目生成唯一邀请码
+      const inviteCode = await this.generateUniqueInviteCode();
+      this.logger.info(`为项目生成邀请码：${inviteCode}`);
+      
       // 构建成员列表和领导者
-      // 如果前端传入了members，使用传入的；否则默认只有提交者
+      // 如果前端传入了 members，使用传入的；否则默认只有提交者
       const members = projectData.members && Array.isArray(projectData.members) 
         ? projectData.members 
         : [projectData.uuid]; // 默认至少包含提交者
@@ -279,20 +321,21 @@ class ProjectService {
         members.push(projectData.uuid);
       }
       
-      // 领导者默认为提交者，但如果前端传入了leader则使用传入的
+      // 领导者默认为提交者，但如果前端传入了 leader 则使用传入的
       const leader = projectData.leader || projectData.uuid;
       
-      this.logger.info(`项目成员: ${members.join(', ')}`);
-      this.logger.info(`项目领导者: ${leader}`);
+      this.logger.info(`项目成员：${members.join(', ')}`);
+      this.logger.info(`项目领导者：${leader}`);
       
       const projectDocument = {
         project_id: projectId,
+        invite_code: inviteCode,              // ⭐ 自动添加邀请码字段
         name: projectData.name.trim(),
         people: projectData.people,
         group: projectData.group.trim(),
         user_uuid: projectData.uuid,
-        members: members,                    // 成员UUID数组
-        leader: leader,                      // 领导者UUID
+        members: members,                    // 成员 UUID 数组
+        leader: leader,                      // 领导者 UUID
         submit_time: new Date(projectData.submitTime),
         created_at: new Date(),
         status: 'submitted' // 可以添加状态字段
@@ -304,8 +347,12 @@ class ProjectService {
       this.logger.step(5, '保存到数据库');
       if (!this.db) {
         this.logger.warn('数据库未连接，返回模拟成功响应');
+        
+        // ⭐ 模拟模式下也生成邀请码
+        const mockInviteCode = this.generateInviteCode();
         const mockResult = {
           project_id: projectId,
+          invite_code: mockInviteCode,        // ⭐ 模拟模式也包含邀请码
           ...projectDocument,
           _id: 'mock_project_id'
         };
