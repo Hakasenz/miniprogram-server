@@ -708,6 +708,92 @@ class ProjectController {
       genLogger.info('服务器错误响应已发送');
     }
   }
+
+  /**
+   * 通过邀请码加入项目接口 ⭐ 新增
+   */
+  async joinProjectByInviteCode(req, res) {
+    const joinLogger = new Logger('JoinProjectAPI');
+    
+    joinLogger.separator('收到加入项目请求');
+    joinLogger.info(`请求时间：${new Date().toISOString()}`);
+    joinLogger.data('请求体', req.body);
+
+    const { inviteCode, uuid } = req.body;
+
+    // 验证必需参数
+    if (!inviteCode || inviteCode.trim() === '') {
+      joinLogger.error('缺少必需参数：inviteCode');
+      return res.status(400).json({ 
+        status: 'error',
+        error: '缺少必需参数',
+        missing_fields: ['inviteCode']
+      });
+    }
+
+    if (!uuid || uuid.trim() === '') {
+      joinLogger.error('缺少必需参数：uuid');
+      return res.status(400).json({ 
+        status: 'error',
+        error: '缺少必需参数',
+        missing_fields: ['uuid']
+      });
+    }
+
+    try {
+      joinLogger.info('开始调用加入项目服务...');
+      
+      // 调用项目服务加入项目
+      const result = await this.projectService.joinProjectByInviteCode(inviteCode.trim(), uuid.trim());
+      joinLogger.info('加入项目服务调用完成');
+
+      if (result.success) {
+        joinLogger.success('加入项目成功');
+        
+        const responseData = {
+          status: 'success',
+          message: result.message || '加入项目成功',
+          data: result.data
+        };
+        
+        joinLogger.data('完整响应体', responseData);
+        
+        res.json(responseData);
+        joinLogger.success('响应已发送给客户端');
+
+      } else {
+        joinLogger.warn('加入项目失败');
+        joinLogger.warn('失败原因:', result.error);
+        
+        // 根据不同错误码返回不同的 HTTP 状态码
+        let statusCode = 400;
+        if (result.code === 'INVITE_CODE_NOT_FOUND') {
+          statusCode = 404;
+        } else if (result.code === 'ALREADY_MEMBER') {
+          statusCode = 409; // Conflict
+        }
+        
+        res.status(statusCode).json({
+          status: 'error',
+          message: result.error,
+          code: result.code
+        });
+        joinLogger.info('错误响应已发送给客户端');
+      }
+
+    } catch (err) {
+      joinLogger.error('服务器异常捕获');
+      joinLogger.error('异常类型:', err.name);
+      joinLogger.error('异常消息:', err.message);
+      joinLogger.debug('异常堆栈:', err.stack);
+      res.status(500).json({ 
+        error: '服务器错误',
+        message: '加入过程中发生服务器异常',
+        details: err.message
+      });
+      joinLogger.info('服务器错误响应已发送');
+    }
+  }
 }
 
 module.exports = ProjectController;

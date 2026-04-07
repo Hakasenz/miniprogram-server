@@ -489,6 +489,105 @@ class ProjectService {
   }
 
   /**
+   * 通过邀请码加入项目
+   * @param {string} inviteCode - 邀请码
+   * @param {string} userUuid - 用户 UUID
+   * @returns {Promise<Object>} 加入结果
+   */
+  async joinProjectByInviteCode(inviteCode, userUuid) {
+    this.logger.startFlow('通过邀请码加入项目');
+    this.logger.info(`邀请码：${inviteCode}, 用户UUID：${userUuid}`);
+
+    try {
+      // 1. 初始化数据库连接
+      await this.initDatabase();
+
+      // 2. 验证参数
+      if (!inviteCode || !userUuid) {
+        this.logger.error('缺少必需参数');
+        return {
+          success: false,
+          error: '缺少必需参数',
+          code: 'MISSING_PARAMS'
+        };
+      }
+
+      // 3. 查询项目
+      this.logger.step(1, '查询项目');
+      const project = await this.db.collection('projects').findOne({ 
+        invite_code: inviteCode.toUpperCase() 
+      });
+
+      if (!project) {
+        this.logger.error(`邀请码不存在：${inviteCode}`);
+        return {
+          success: false,
+          error: '邀请码不存在或已失效',
+          code: 'INVITE_CODE_NOT_FOUND'
+        };
+      }
+
+      this.logger.success(`找到项目：${project.name} (${project.project_id})`);
+
+      // 4. 检查用户是否已是成员
+      if (project.members && project.members.includes(userUuid)) {
+        this.logger.warn(`用户 ${userUuid} 已是项目成员`);
+        return {
+          success: false,
+          error: '您已经是该项目的成员',
+          code: 'ALREADY_MEMBER'
+        };
+      }
+
+      // 5. 将用户添加到成员列表
+      this.logger.step(2, '更新成员列表');
+      const updateResult = await this.db.collection('projects').updateOne(
+        { project_id: project.project_id },
+        { 
+          $addToSet: { members: userUuid },  // 使用 $addToSet 避免重复
+          $set: { updated_at: new Date() }
+        }
+      );
+
+      if (updateResult.modifiedCount > 0) {
+        this.logger.success(`用户 ${userUuid} 成功加入项目 ${project.name}`);
+        
+        // 获取更新后的项目信息
+        const updatedProject = await this.db.collection('projects').findOne({ 
+          project_id: project.project_id 
+        });
+
+        return {
+          success: true,
+          message: '加入项目成功',
+          data: {
+            project_id: updatedProject.project_id,
+            project_name: updatedProject.name,
+            members_count: updatedProject.members ? updatedProject.members.length : 1
+          }
+        };
+      } else {
+        this.logger.error('加入项目失败：未更新任何记录');
+        return {
+          success: false,
+          error: '加入项目失败',
+          code: 'JOIN_FAILED'
+        };
+      }
+
+    } catch (error) {
+      this.logger.error('加入项目异常:', error.message);
+      this.logger.error('错误详情:', error);
+      
+      return {
+        success: false,
+        error: '服务器内部错误',
+        details: error.message
+      };
+    }
+  }
+
+  /**
    * 删除项目
    */
   async deleteProject(projectId) {

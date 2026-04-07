@@ -39,4 +39,9 @@ router.post('/generate-invite', (req, res) => {
   projectController.generateInviteCode(req, res);
 });
 
+// 通过邀请码加入项目接口 ⭐ 新增
+router.post('/join', (req, res) => {
+  projectController.joinProjectByInviteCode(req, res);
+});
+
 module.exports = router;
