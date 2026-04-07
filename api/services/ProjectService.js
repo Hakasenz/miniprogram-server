@@ -489,6 +489,90 @@ class ProjectService {
   }
 
   /**
+   * 根据邀请码查询项目
+   * @param {string} inviteCode - 邀请码
+   * @returns {Promise<Object>} 查询结果
+   */
+  async getProjectByInviteCode(inviteCode) {
+    this.logger.startFlow('通过邀请码查询项目');
+    this.logger.info(`邀请码：${inviteCode}`);
+
+    try {
+      // 1. 初始化数据库连接
+      this.logger.step(1, '初始化数据库连接');
+      await this.initDatabase();
+
+      // 2. 验证邀请码格式
+      this.logger.step(2, '验证邀请码格式');
+      if (!inviteCode || typeof inviteCode !== 'string' || inviteCode.trim() === '') {
+        this.logger.endFlow('通过邀请码查询项目', false);
+        return {
+          success: false,
+          error: '邀请码格式不正确'
+        };
+      }
+
+      // 3. 查询数据库
+      this.logger.step(3, '查询数据库');
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟数据');
+        const mockProject = {
+          _id: 'mock_project_invite',
+          project_id: 'proj-mock-invite-001',
+          invite_code: inviteCode,
+          name: '模拟项目（通过邀请码）',
+          people: 5,
+          group: '邀请测试组',
+          user_uuid: 'u-creator-001',
+          members: ['u-creator-001', 'u-member-002'],
+          leader: 'u-creator-001',
+          submit_time: new Date(),
+          created_at: new Date(),
+          status: 'submitted'
+        };
+        this.logger.data('模拟项目数据', mockProject);
+        this.logger.endFlow('通过邀请码查询项目', true);
+        return {
+          success: true,
+          data: mockProject
+        };
+      }
+
+      this.logger.database('QUERY', `db.projects.findOne({ invite_code: "${inviteCode}" })`);
+      const project = await this.db.collection('projects').findOne({ invite_code: inviteCode.toUpperCase() });
+
+      if (project) {
+        this.logger.success(`找到项目：${project.name} (${project.project_id})`);
+        this.logger.data('项目详情', project);
+        this.logger.endFlow('通过邀请码查询项目', true);
+        return {
+          success: true,
+          data: project
+        };
+      } else {
+        this.logger.warn(`未找到邀请码对应的项目：${inviteCode}`);
+        this.logger.endFlow('通过邀请码查询项目', true);
+        return {
+          success: false,
+          error: '邀请码不存在',
+          data: null
+        };
+      }
+
+    } catch (error) {
+      this.logger.error('查询异常:', error.message);
+      this.logger.error('错误详情:', error);
+      this.logger.endFlow('通过邀请码查询项目', false);
+      
+      return {
+        success: false,
+        error: '服务器内部错误',
+        details: error.message
+      };
+    }
+  }
+
+  /**
    * 通过邀请码加入项目
    * @param {string} inviteCode - 邀请码
    * @param {string} userUuid - 用户 UUID
