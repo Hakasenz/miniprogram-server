@@ -426,7 +426,7 @@ class ProjectService {
         };
       }
 
-      // 3. 查询数据库
+      // 3. ⭐ 查询数据库：返回用户作为领导者或成员的所有项目
       this.logger.step(3, '查询数据库');
       if (!this.db) {
         this.logger.warn('数据库未连接，返回模拟数据');
@@ -453,18 +453,25 @@ class ProjectService {
         };
       }
 
-      this.logger.database('QUERY', 'db.projects.find({ leader: "..." })');
-      const projects = await this.db.collection('projects').find({ leader: uuid }).toArray();
+      // ⭐ 使用 $or 查询：leader 是用户 OR members 包含用户
+      this.logger.database('QUERY', `db.projects.find({ $or: [{ leader: "${uuid}" }, { members: "${uuid}" }] })`);
+      const projects = await this.db.collection('projects').find({ 
+        $or: [
+          { leader: uuid },           // 用户是项目负责人
+          { members: uuid }           // ⭐ 用户是项目成员
+        ]
+      }).toArray();
 
-      this.logger.success(`找到 ${projects.length} 个项目，用户 ${uuid} 为领导者`);
+      this.logger.success(`找到 ${projects.length} 个项目，用户 ${uuid} 为领导者或成员`);
       
       if (projects.length > 0) {
         this.logger.info('项目列表:');
         projects.forEach((project, index) => {
-          this.logger.info(`  ${index + 1}. ${project.name} (${project.project_id})`);
+          const role = project.leader === uuid ? '负责人' : '成员';
+          this.logger.info(`  ${index + 1}. ${project.name} (${project.project_id}) - ${role}`);
         });
       } else {
-        this.logger.info('该用户不是任何项目的领导者');
+        this.logger.info('该用户没有参与任何项目');
       }
 
       this.logger.data('查询结果', projects);
