@@ -636,7 +636,7 @@ class ProjectService {
       if (updateResult.modifiedCount > 0) {
         this.logger.success(`用户 ${userUuid} 成功加入项目 ${project.name}`);
         
-        // 获取更新后的项目信息
+        // ⭐ 获取更新后的完整项目信息（包含 invite_code）
         const updatedProject = await this.db.collection('projects').findOne({ 
           project_id: project.project_id 
         });
@@ -647,6 +647,11 @@ class ProjectService {
           data: {
             project_id: updatedProject.project_id,
             project_name: updatedProject.name,
+            invite_code: updatedProject.invite_code || null,  // ⭐ 包含邀请码
+            group: updatedProject.group,
+            people: updatedProject.people,
+            leader: updatedProject.leader,
+            members: updatedProject.members || [],
             members_count: updatedProject.members ? updatedProject.members.length : 1
           }
         };
