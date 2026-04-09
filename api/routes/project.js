@@ -44,4 +44,14 @@ router.post('/join', (req, res) => {
   projectController.joinProjectByInviteCode(req, res);
 });
 
+// ⭐ 添加流程节点接口
+router.post('/workflow/add', (req, res) => {
+  projectController.addWorkflowStep(req, res);
+});
+
+// ⭐ 更新流程节点状态接口
+router.post('/workflow/update', (req, res) => {
+  projectController.updateWorkflowStep(req, res);
+});
+
 module.exports = router;

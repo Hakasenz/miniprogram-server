@@ -97,6 +97,26 @@ class ProjectService {
       }
     }
 
+    // ⭐ 验证可选字段：workflow（流程进度）
+    if (projectData.workflow !== undefined) {
+      if (!Array.isArray(projectData.workflow)) {
+        errors.push('流程数据必须是数组格式');
+      } else {
+        // 验证每个流程节点
+        projectData.workflow.forEach((step, index) => {
+          if (!step.action || typeof step.action !== 'string') {
+            errors.push(`流程步骤${index + 1}缺少操作描述`);
+          }
+          if (!step.submitter || typeof step.submitter !== 'string') {
+            errors.push(`流程步骤${index + 1}缺少提交者`);
+          }
+          if (!step.submit_time || isNaN(new Date(step.submit_time).getTime())) {
+            errors.push(`流程步骤${index + 1}时间格式不正确`);
+          }
+        });
+      }
+    }
+
     if (errors.length > 0) {
       this.logger.error('数据验证失败:', errors);
       return { valid: false, errors };
@@ -1019,8 +1039,147 @@ class ProjectService {
       this.logger.endFlow('项目更新', false);
       return {
         success: false,
-        error: '更新过程中发生异常',
-        details: [error.message]
+        error: '更新失败',
+        details: error.message
+      };
+    }
+  }
+
+  /**
+   * ⭐ 添加流程节点
+   */
+  async addWorkflowStep({ project_id, action, submitter, status = 'pending' }) {
+    this.logger.info('开始添加流程节点...');
+    this.logger.data('流程节点数据', { project_id, action, submitter, status });
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟数据');
+        const mockStep = {
+          step_id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          action,
+          submitter,
+          status,
+          submit_time: new Date().toISOString(),
+          update_time: null
+        };
+        return {
+          success: true,
+          data: mockStep
+        };
+      }
+
+      // 创建新的流程节点
+      const newStep = {
+        step_id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        action,
+        submitter,
+        status,
+        submit_time: new Date().toISOString(),
+        update_time: null
+      };
+
+      this.logger.database('UPDATE', 'db.projects.updateOne - $push workflow');
+      
+      // 将新节点添加到项目的 workflow 数组中
+      const result = await this.db.collection('projects').updateOne(
+        { project_id: project_id },
+        { 
+          $push: { workflow: newStep },
+          $set: { updated_at: new Date().toISOString() }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        this.logger.error('未找到指定项目');
+        return {
+          success: false,
+          error: '项目不存在'
+        };
+      }
+
+      this.logger.success(`流程节点添加成功！步骤ID: ${newStep.step_id}`);
+      this.logger.info(`操作: ${action}, 提交者: ${submitter}, 状态: ${status}`);
+
+      return {
+        success: true,
+        data: newStep
+      };
+
+    } catch (error) {
+      this.logger.error('添加流程节点失败:', error.message);
+      this.logger.error('错误详情:', error);
+      return {
+        success: false,
+        error: '添加失败',
+        details: error.message
+      };
+    }
+  }
+
+  /**
+   * ⭐ 更新流程节点状态
+   */
+  async updateWorkflowStep({ project_id, step_id, status }) {
+    this.logger.info('开始更新流程节点状态...');
+    this.logger.data('更新数据', { project_id, step_id, status });
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟成功');
+        return {
+          success: true,
+          data: { step_id, status, update_time: new Date().toISOString() }
+        };
+      }
+
+      this.logger.database('UPDATE', 'db.projects.updateOne - 更新 workflow 节点状态');
+      
+      // 更新指定流程节点的状态
+      const result = await this.db.collection('projects').updateOne(
+        { 
+          project_id: project_id,
+          'workflow.step_id': step_id
+        },
+        { 
+          $set: { 
+            'workflow.$.status': status,
+            'workflow.$.update_time': new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        this.logger.error('未找到指定的项目或流程节点');
+        return {
+          success: false,
+          error: '项目或流程节点不存在'
+        };
+      }
+
+      this.logger.success(`流程节点状态更新成功！步骤ID: ${step_id}, 新状态: ${status}`);
+
+      return {
+        success: true,
+        data: {
+          step_id,
+          status,
+          update_time: new Date().toISOString()
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('更新流程节点状态失败:', error.message);
+      this.logger.error('错误详情:', error);
+      return {
+        success: false,
+        error: '更新失败',
+        details: error.message
       };
     }
   }

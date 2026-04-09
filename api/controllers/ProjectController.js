@@ -794,6 +794,117 @@ class ProjectController {
       joinLogger.info('服务器错误响应已发送');
     }
   }
+
+  /**
+   * ⭐ 添加流程节点
+   * POST /api/project/workflow/add
+   */
+  async addWorkflowStep(req, res) {
+    const workflowLogger = new Logger('ProjectController.addWorkflowStep');
+    
+    workflowLogger.separator('收到添加流程节点请求');
+    workflowLogger.info('API版本: v1.0 - 添加项目流程节点');
+    workflowLogger.info(`请求时间: ${new Date().toISOString()}`);
+    workflowLogger.data('请求体', req.body);
+
+    const { project_id, action, submitter, status = 'pending' } = req.body;
+
+    // 验证必需参数
+    if (!project_id || !action || !submitter) {
+      workflowLogger.error('缺少必需参数');
+      return res.status(400).json({ 
+        error: '缺少必需参数',
+        missing_fields: ['project_id', 'action', 'submitter']
+      });
+    }
+
+    try {
+      workflowLogger.info('开始调用服务层...');
+      
+      const result = await this.projectService.addWorkflowStep({
+        project_id,
+        action,
+        submitter,
+        status
+      });
+
+      if (result.success) {
+        workflowLogger.success('流程节点添加成功');
+        res.json({
+          status: 'success',
+          message: '流程节点添加成功',
+          data: result.data
+        });
+      } else {
+        workflowLogger.error('流程节点添加失败');
+        res.status(400).json({
+          status: 'error',
+          message: result.error,
+          details: result.details
+        });
+      }
+
+    } catch (err) {
+      workflowLogger.error('服务器异常:', err.message);
+      res.status(500).json({ 
+        error: '服务器错误',
+        message: '添加流程节点时发生异常',
+        details: err.message
+      });
+    }
+  }
+
+  /**
+   * ⭐ 更新流程节点状态
+   * POST /api/project/workflow/update
+   */
+  async updateWorkflowStep(req, res) {
+    const workflowLogger = new Logger('ProjectController.updateWorkflowStep');
+    
+    workflowLogger.separator('收到更新流程节点请求');
+    workflowLogger.info('API版本: v1.0 - 更新项目流程节点状态');
+    workflowLogger.data('请求体', req.body);
+
+    const { project_id, step_id, status } = req.body;
+
+    if (!project_id || !step_id || !status) {
+      workflowLogger.error('缺少必需参数');
+      return res.status(400).json({ 
+        error: '缺少必需参数',
+        missing_fields: ['project_id', 'step_id', 'status']
+      });
+    }
+
+    try {
+      const result = await this.projectService.updateWorkflowStep({
+        project_id,
+        step_id,
+        status
+      });
+
+      if (result.success) {
+        workflowLogger.success('流程节点状态更新成功');
+        res.json({
+          status: 'success',
+          message: '流程节点状态更新成功',
+          data: result.data
+        });
+      } else {
+        workflowLogger.error('流程节点状态更新失败');
+        res.status(400).json({
+          status: 'error',
+          message: result.error
+        });
+      }
+
+    } catch (err) {
+      workflowLogger.error('服务器异常:', err.message);
+      res.status(500).json({ 
+        error: '服务器错误',
+        details: err.message
+      });
+    }
+  }
 }
 
 module.exports = ProjectController;
