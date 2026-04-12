@@ -1,11 +1,30 @@
 const AuthService = require('../services/AuthService');
 const Logger = require('../utils/Logger');
-const UserModel = require('../models/UserModel');
+const { MongoClient } = require('mongodb');
 
 class AuthController {
   constructor() {
     this.authService = new AuthService();
     this.logger = new Logger('LoginAPI');
+    this.db = null;
+    this.MONGODB_URI = process.env.MONGODB_URI || 'your_mongodb_connection_string';
+    this.DATABASE_NAME = process.env.DATABASE_NAME || 'miniprogram';
+  }
+
+  /**
+   * 初始化数据库连接
+   */
+  async initDatabase() {
+    if (this.db) return;
+    
+    try {
+      const mongoClient = new MongoClient(this.MONGODB_URI);
+      await mongoClient.connect();
+      this.db = mongoClient.db(this.DATABASE_NAME);
+      this.logger.success('MongoDB 连接成功');
+    } catch (error) {
+      this.logger.error('MongoDB 连接失败:', error.message);
+    }
   }
 
   /**
@@ -19,6 +38,12 @@ class AuthController {
     }
 
     try {
+      await this.initDatabase();
+      
+      if (!this.db) {
+        return res.status(500).json({ error: '数据库连接失败' });
+      }
+
       let updateData = {};
       
       // 根据选择的角色类型设置权限
@@ -58,7 +83,7 @@ class AuthController {
           break;
       }
 
-      const result = await UserModel.updateOne(
+      const result = await this.db.collection('users').updateOne(
         { uuid: user_uuid },
         { $set: updateData }
       );
