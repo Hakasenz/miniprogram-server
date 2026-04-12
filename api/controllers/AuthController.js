@@ -31,75 +31,66 @@ class AuthController {
    * ⭐ 临时接口：更新用户权限（仅用于测试）
    */
   async updatePermissions(req, res) {
+    console.log('🔧 [updatePermissions] 收到请求');
     const { user_uuid, role_type } = req.body;
     
     if (!user_uuid || !role_type) {
+      console.error('❌ 缺少参数');
       return res.status(400).json({ error: '缺少必需参数' });
     }
 
     try {
-      await this.initDatabase();
+      // 增加超时保护，防止数据库连接卡死
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('数据库连接超时')), 5000)
+      );
+
+      await Promise.race([this.initDatabase(), timeoutPromise]);
       
       if (!this.db) {
+        console.error('❌ 数据库对象为空');
         return res.status(500).json({ error: '数据库连接失败' });
       }
 
       let updateData = {};
-      
-      // 根据选择的角色类型设置权限
       switch (role_type) {
         case 'admin':
-          updateData = {
-            position: '系统管理员',
-            rank: 10,
-            system_roles: ['admin'],
-            managed_team_ids: []
-          };
+          updateData = { position: '系统管理员', rank: 10, system_roles: ['admin'], managed_team_ids: [] };
           break;
         case 'manager':
-          updateData = {
-            position: '技术总监',
-            rank: 8,
-            system_roles: [],
-            managed_team_ids: ['team-test'] // 测试团队ID
-          };
+          updateData = { position: '技术总监', rank: 8, system_roles: [], managed_team_ids: ['team-test'] };
           break;
         case 'hr':
-          updateData = {
-            position: '人力资源经理',
-            rank: 6,
-            system_roles: ['hr'],
-            managed_team_ids: []
-          };
+          updateData = { position: '人力资源经理', rank: 6, system_roles: ['hr'], managed_team_ids: [] };
           break;
-        case 'employee':
         default:
-          updateData = {
-            position: '普通员工',
-            rank: 3,
-            system_roles: [],
-            managed_team_ids: []
-          };
-          break;
+          updateData = { position: '普通员工', rank: 3, system_roles: [], managed_team_ids: [] };
       }
 
+      console.log('📝 正在更新数据库...');
       const result = await this.db.collection('users').updateOne(
         { uuid: user_uuid },
         { $set: updateData }
       );
 
-      if (result.modifiedCount > 0) {
-        return res.json({
-          success: true,
-          message: `权限已更新为: ${role_type}`,
-          data: updateData
-        });
-      } else {
-        return res.status(404).json({ error: '用户未找到' });
+      if (result.matchedCount === 0) {
+        return res.status(404).json({ error: '用户未找到，请检查 UUID' });
       }
+
+      console.log('✅ 权限更新成功');
+      return res.json({
+        success: true,
+        message: `权限已更新为: ${role_type}`,
+        data: updateData
+      });
+
     } catch (error) {
-      console.error('更新权限失败:', error);
-      return res.status(500).json({ error: '服务器错误' });
+      console.error('❌ 更新权限异常:', error.message);
+      // 确保即使出错也返回 JSON，而不是让请求挂起
+      return res.status(500).json({ 
+        error: '服务器内部错误',
+        details: error.message 
+      });
     }
   }
 
