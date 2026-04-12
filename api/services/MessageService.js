@@ -17,10 +17,7 @@ class MessageService {
     if (this.db) return;
 
     try {
-      this.mongoClient = new MongoClient(this.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
-      });
+      this.mongoClient = new MongoClient(this.MONGODB_URI);
 
       await this.mongoClient.connect();
       this.db = this.mongoClient.db(this.DATABASE_NAME);
