@@ -1,5 +1,6 @@
 const { MongoClient } = require('mongodb');
 const Logger = require('../utils/Logger');
+const MessageService = require('./MessageService');
 
 class ProjectService {
   constructor() {
@@ -10,6 +11,9 @@ class ProjectService {
     
     // 创建日志器实例
     this.logger = new Logger('ProjectService');
+    
+    // ⭐ 初始化消息服务
+    this.messageService = new MessageService();
   }
 
   /**
@@ -1071,6 +1075,17 @@ class ProjectService {
         };
       }
 
+      // 先获取项目信息，用于发送通知
+      const project = await this.db.collection('projects').findOne({ project_id });
+      
+      if (!project) {
+        this.logger.error('未找到指定项目');
+        return {
+          success: false,
+          error: '项目不存在'
+        };
+      }
+
       // 创建新的流程节点
       const newStep = {
         step_id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -1102,6 +1117,20 @@ class ProjectService {
 
       this.logger.success(`流程节点添加成功！步骤ID: ${newStep.step_id}`);
       this.logger.info(`操作: ${action}, 提交者: ${submitter}, 状态: ${status}`);
+
+      // ⭐ 发送通知给项目负责人
+      if (project.leader && project.leader !== submitter) {
+        this.logger.info('发送流程提交通知给项目负责人...');
+        await this.messageService.sendWorkflowSubmitNotification({
+          project_id,
+          project_name: project.name || '未知项目',
+          step_id: newStep.step_id,
+          action,
+          submitter_uuid: submitter,
+          leader_uuid: project.leader
+        });
+        this.logger.success('流程提交通知已发送');
+      }
 
       return {
         success: true,
@@ -1137,6 +1166,27 @@ class ProjectService {
         };
       }
 
+      // ⭐ 先获取项目和流程节点信息，用于发送通知
+      const project = await this.db.collection('projects').findOne({ project_id });
+      
+      if (!project) {
+        this.logger.error('未找到指定的项目');
+        return {
+          success: false,
+          error: '项目不存在'
+        };
+      }
+
+      const workflowStep = project.workflow?.find(step => step.step_id === step_id);
+      
+      if (!workflowStep) {
+        this.logger.error('未找到指定的流程节点');
+        return {
+          success: false,
+          error: '流程节点不存在'
+        };
+      }
+
       this.logger.database('UPDATE', 'db.projects.updateOne - 更新 workflow 节点状态');
       
       // 更新指定流程节点的状态
@@ -1163,6 +1213,21 @@ class ProjectService {
       }
 
       this.logger.success(`流程节点状态更新成功！步骤ID: ${step_id}, 新状态: ${status}`);
+
+      // ⭐ 发送审批结果通知给提交者
+      if (workflowStep.submitter) {
+        this.logger.info('发送流程审批结果通知给提交者...');
+        await this.messageService.sendWorkflowApprovalNotification({
+          project_id,
+          project_name: project.name || '未知项目',
+          step_id,
+          action: workflowStep.action,
+          submitter_uuid: workflowStep.submitter,
+          approver_uuid: workflowStep.submitter, // 这里应该传入审批者UUID，后续优化
+          status
+        });
+        this.logger.success('流程审批结果通知已发送');
+      }
 
       return {
         success: true,
