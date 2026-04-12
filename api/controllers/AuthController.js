@@ -1,10 +1,30 @@
 const AuthService = require('../services/AuthService');
 const Logger = require('../utils/Logger');
+const { MongoClient } = require('mongodb');
 
 class AuthController {
   constructor() {
     this.authService = new AuthService();
-    this.logger = new Logger('LoginAPI');
+    this.logger = new Logger('AuthAPI');
+    this.db = null;
+    this.MONGODB_URI = process.env.MONGODB_URI || 'your_mongodb_connection_string';
+    this.DATABASE_NAME = process.env.DATABASE_NAME || 'miniprogram';
+  }
+
+  /**
+   * 初始化数据库连接
+   */
+  async initDatabase() {
+    if (this.db) return;
+    
+    try {
+      const mongoClient = new MongoClient(this.MONGODB_URI);
+      await mongoClient.connect();
+      this.db = mongoClient.db(this.DATABASE_NAME);
+      this.logger.success('MongoDB 连接成功');
+    } catch (error) {
+      this.logger.error('MongoDB 连接失败:', error.message);
+    }
   }
 
   /**
@@ -78,6 +98,123 @@ class AuthController {
       this.logger.debug('异常堆栈:', err.stack);
       res.status(500).json({ error: '服务器错误' });
       this.logger.info('服务器错误响应已发送');
+    }
+  }
+
+  /**
+   * ⭐ 更新用户权限（临时权限设置）
+   */
+  async updatePermissions(req, res) {
+    this.logger.separator('收到更新权限请求');
+    
+    const { uuid, role } = req.body;
+    
+    // 验证必需参数
+    if (!uuid || !role) {
+      this.logger.error('缺少必需参数: uuid 或 role');
+      return res.status(400).json({ 
+        success: false,
+        error: '缺少必需参数' 
+      });
+    }
+
+    // 定义角色配置
+    const roleConfig = {
+      admin: {
+        position: '系统管理员',
+        rank: 10,
+        system_roles: ['admin'],
+        managed_team_ids: []
+      },
+      manager: {
+        position: '团队管理者',
+        rank: 7,
+        system_roles: [],
+        managed_team_ids: []
+      },
+      employee: {
+        position: '',
+        rank: 1,
+        system_roles: [],
+        managed_team_ids: []
+      }
+    };
+
+    const config = roleConfig[role];
+    if (!config) {
+      this.logger.error(`无效的角色类型: ${role}`);
+      return res.status(400).json({
+        success: false,
+        error: '无效的角色类型，必须是 admin、manager 或 employee'
+      });
+    }
+
+    try {
+      await this.initDatabase();
+      
+      this.logger.info(`更新用户权限: uuid=${uuid}, role=${role}`);
+      
+      // 更新数据库中的用户信息
+      const result = await this.db.collection('users').updateOne(
+        { uuid: uuid },
+        { 
+          $set: {
+            position: config.position,
+            rank: config.rank,
+            system_roles: config.system_roles,
+            managed_team_ids: config.managed_team_ids,
+            updated_at: new Date()
+          }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        this.logger.warn(`用户不存在: ${uuid}`);
+        return res.status(404).json({
+          success: false,
+          error: '用户不存在'
+        });
+      }
+
+      this.logger.success('权限更新成功');
+      this.logger.data('新权限配置', config);
+
+      // 获取更新后的用户信息
+      const updatedUser = await this.db.collection('users').findOne(
+        { uuid: uuid },
+        {
+          projection: {
+            _id: 1,
+            uuid: 1,
+            username: 1,
+            position: 1,
+            rank: 1,
+            system_roles: 1,
+            managed_team_ids: 1,
+            wechat_id: 1,
+            wechat_name: 1,
+            avatar_url: 1,
+            company_id: 1,
+            created_at: 1,
+            updated_at: 1
+          }
+        }
+      );
+
+      res.json({
+        success: true,
+        message: '权限更新成功',
+        data: updatedUser
+      });
+
+    } catch (err) {
+      this.logger.error('更新权限失败:', err.message);
+      this.logger.debug('错误堆栈:', err.stack);
+      res.status(500).json({
+        success: false,
+        error: '服务器错误',
+        message: err.message
+      });
     }
   }
 }
