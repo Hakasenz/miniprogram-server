@@ -54,4 +54,9 @@ router.post('/workflow/update', (req, res) => {
   projectController.updateWorkflowStep(req, res);
 });
 
+// ⭐ 获取用户团队关系接口
+router.get('/team-relations', (req, res) => {
+  projectController.getUserTeamRelations(req, res);
+});
+
 module.exports = router;

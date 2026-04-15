@@ -905,6 +905,69 @@ class ProjectController {
       });
     }
   }
+
+  /**
+   * ⭐ 获取用户的团队关系（我创建的和加入的）
+   */
+  async getUserTeamRelations(req, res) {
+    const logger = new Logger('UserTeamRelationsAPI');
+    
+    logger.separator('收到获取用户团队关系请求');
+    logger.info(`请求时间: ${new Date().toISOString()}`);
+    
+    const { uuid } = req.query;
+    
+    // 验证必需参数
+    if (!uuid) {
+      logger.error('缺少必需参数: uuid');
+      return res.status(400).json({ 
+        status: 'error',
+        message: '缺少用户UUID参数'
+      });
+    }
+    
+    logger.info(`查询用户UUID: ${uuid}`);
+    
+    try {
+      logger.info('开始调用项目服务...');
+      
+      // 调用项目服务获取团队关系
+      const result = await this.projectService.getUserTeamRelations(uuid);
+      logger.info('项目服务调用完成');
+      
+      if (result.success) {
+        logger.success('获取团队关系成功');
+        logger.data('统计数据', result.data.stats);
+        
+        res.json({
+          status: 'success',
+          message: '获取团队关系成功',
+          data: result.data
+        });
+        
+        logger.success('响应已发送给客户端');
+      } else {
+        logger.error('获取团队关系失败');
+        logger.error('失败原因:', result.error);
+        
+        res.status(400).json({
+          status: 'error',
+          message: result.error,
+          details: result.details
+        });
+      }
+      
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      
+      res.status(500).json({
+        status: 'error',
+        message: '服务器内部错误',
+        details: err.message
+      });
+    }
+  }
 }
 
 module.exports = ProjectController;

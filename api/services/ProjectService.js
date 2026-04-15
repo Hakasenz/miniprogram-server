@@ -1050,6 +1050,115 @@ class ProjectService {
   }
 
   /**
+   * ⭐ 获取用户的团队关系（我创建的和加入的）
+   * @param {string} userUuid - 用户 UUID
+   * @returns {Promise<Object>} 包含 createdTeams 和 joinedTeams
+   */
+  async getUserTeamRelations(userUuid) {
+    this.logger.startFlow('获取用户团队关系');
+    this.logger.info(`用户UUID: ${userUuid}`);
+
+    try {
+      // 1. 初始化数据库连接
+      await this.initDatabase();
+
+      // 2. 验证参数
+      if (!userUuid || typeof userUuid !== 'string') {
+        this.logger.error('无效的用户UUID');
+        return {
+          success: false,
+          error: '用户UUID不能为空'
+        };
+      }
+
+      // 3. 查询用户创建的团队（leader = userUuid）
+      this.logger.step(1, '查询用户创建的团队');
+      const createdTeams = await this.db.collection('projects').find({ 
+        leader: userUuid 
+      }).sort({ created_at: -1 }).toArray();
+
+      this.logger.success(`找到 ${createdTeams.length} 个创建的团队`);
+
+      // 4. 查询用户加入的团队（members 包含 userUuid，但 leader != userUuid）
+      this.logger.step(2, '查询用户加入的团队');
+      const joinedTeams = await this.db.collection('projects').find({ 
+        members: userUuid,
+        leader: { $ne: userUuid }  // 排除自己创建的
+      }).sort({ created_at: -1 }).toArray();
+
+      this.logger.success(`找到 ${joinedTeams.length} 个加入的团队`);
+
+      // 5. 为每个团队补充成员详细信息
+      this.logger.step(3, '补充团队成员信息');
+      
+      const enrichTeamInfo = async (team) => {
+        // 获取领导者信息
+        let leaderInfo = null;
+        if (team.leader) {
+          leaderInfo = await this.db.collection('users').findOne(
+            { uuid: team.leader },
+            { projection: { uuid: 1, username: 1, avatar_url: 1, position: 1 } }
+          );
+        }
+
+        // 获取所有成员信息
+        let memberInfos = [];
+        if (team.members && team.members.length > 0) {
+          memberInfos = await this.db.collection('users').find(
+            { uuid: { $in: team.members } },
+            { projection: { uuid: 1, username: 1, avatar_url: 1, position: 1 } }
+          ).toArray();
+        }
+
+        return {
+          ...team,
+          leader_info: leaderInfo,
+          member_infos: memberInfos,
+          members_count: team.members ? team.members.length : 0
+        };
+      };
+
+      // 并行处理所有团队
+      const [enrichedCreated, enrichedJoined] = await Promise.all([
+        Promise.all(createdTeams.map(enrichTeamInfo)),
+        Promise.all(joinedTeams.map(enrichTeamInfo))
+      ]);
+
+      this.logger.data('团队关系统计', {
+        created_count: enrichedCreated.length,
+        joined_count: enrichedJoined.length,
+        total_count: enrichedCreated.length + enrichedJoined.length
+      });
+
+      this.logger.endFlow('获取用户团队关系', true);
+
+      return {
+        success: true,
+        data: {
+          created_teams: enrichedCreated,
+          joined_teams: enrichedJoined,
+          stats: {
+            created_count: enrichedCreated.length,
+            joined_count: enrichedJoined.length,
+            total_count: enrichedCreated.length + enrichedJoined.length
+          }
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('获取团队关系失败:', error.message);
+      this.logger.error('错误详情:', error);
+      this.logger.endFlow('获取用户团队关系', false);
+      
+      return {
+        success: false,
+        error: '服务器内部错误',
+        details: error.message
+      };
+    }
+  }
+
+  /**
    * ⭐ 添加流程节点
    */
   async addWorkflowStep({ project_id, action, submitter, status = 'pending' }) {
