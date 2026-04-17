@@ -29,4 +29,19 @@ router.get('/unread-count', (req, res) => {
   messageController.getUnreadCount(req, res);
 });
 
+// ⭐ 发送团队聊天消息
+router.post('/team-chat/send', (req, res) => {
+  messageController.sendTeamChatMessage(req, res);
+});
+
+// ⭐ 获取团队聊天消息列表
+router.get('/team-chat/list', (req, res) => {
+  messageController.getTeamChatMessages(req, res);
+});
+
+// ⭐ 删除团队聊天消息
+router.post('/team-chat/delete', (req, res) => {
+  messageController.deleteTeamChatMessage(req, res);
+});
+
 module.exports = router;

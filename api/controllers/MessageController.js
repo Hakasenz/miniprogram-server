@@ -205,6 +205,133 @@ class MessageController {
       });
     }
   }
+
+  /**
+   * ⭐ 发送团队聊天消息
+   */
+  async sendTeamChatMessage(req, res) {
+    const logger = new Logger('MessageController.sendTeamChatMessage');
+    
+    try {
+      const { content, project_id, sender_uuid, sender_name, sender_avatar } = req.body;
+
+      if (!content || !project_id || !sender_uuid) {
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少必要参数'
+        });
+      }
+
+      const result = await this.messageService.sendTeamChatMessage({
+        content,
+        project_id,
+        sender_uuid,
+        sender_name,
+        sender_avatar
+      });
+
+      if (result.success) {
+        return res.json({
+          status: 'success',
+          data: result.data
+        });
+      } else {
+        return res.status(500).json({
+          status: 'error',
+          message: result.error
+        });
+      }
+
+    } catch (error) {
+      logger.error('发送团队消息失败:', error);
+      return res.status(500).json({
+        status: 'error',
+        message: '服务器内部错误'
+      });
+    }
+  }
+
+  /**
+   * ⭐ 获取团队聊天消息列表
+   */
+  async getTeamChatMessages(req, res) {
+    const logger = new Logger('MessageController.getTeamChatMessages');
+    
+    try {
+      const { project_id, page = 1, pageSize = 30 } = req.query;
+
+      if (!project_id) {
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少项目ID'
+        });
+      }
+
+      const result = await this.messageService.getTeamChatMessages({
+        project_id,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize)
+      });
+
+      if (result.success) {
+        return res.json({
+          status: 'success',
+          data: result.data
+        });
+      } else {
+        return res.status(500).json({
+          status: 'error',
+          message: result.error
+        });
+      }
+
+    } catch (error) {
+      logger.error('获取团队消息列表失败:', error);
+      return res.status(500).json({
+        status: 'error',
+        message: '服务器内部错误'
+      });
+    }
+  }
+
+  /**
+   * ⭐ 删除团队聊天消息
+   */
+  async deleteTeamChatMessage(req, res) {
+    const logger = new Logger('MessageController.deleteTeamChatMessage');
+    
+    try {
+      const { message_id, uuid } = req.body;
+
+      if (!message_id || !uuid) {
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少必要参数'
+        });
+      }
+
+      const result = await this.messageService.deleteTeamChatMessage({ message_id, uuid });
+
+      if (result.success) {
+        return res.json({
+          status: 'success',
+          data: result.data
+        });
+      } else {
+        return res.status(500).json({
+          status: 'error',
+          message: result.error
+        });
+      }
+
+    } catch (error) {
+      logger.error('删除团队消息失败:', error);
+      return res.status(500).json({
+        status: 'error',
+        message: '服务器内部错误'
+      });
+    }
+  }
 }
 
 module.exports = MessageController;

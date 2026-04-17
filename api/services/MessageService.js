@@ -414,6 +414,186 @@ class MessageService {
   }
 
   /**
+   * ⭐ 发送团队聊天消息（使用独立的 team_chats 集合）
+   */
+  async sendTeamChatMessage({ content, project_id, sender_uuid, sender_name, sender_avatar }) {
+    this.logger.info('开始发送团队聊天消息...');
+    this.logger.data('消息数据', { project_id, sender_uuid });
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟数据');
+        const mockMessage = {
+          chat_id: `chat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          content,
+          project_id,
+          sender_uuid,
+          sender_name,
+          sender_avatar,
+          is_deleted: false,
+          created_at: new Date().toISOString()
+        };
+        return {
+          success: true,
+          data: mockMessage
+        };
+      }
+
+      const message = {
+        chat_id: `chat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        content,
+        project_id,
+        sender_uuid,
+        sender_name,
+        sender_avatar,
+        is_deleted: false,
+        created_at: new Date().toISOString()
+      };
+
+      this.logger.database('INSERT', 'db.team_chats.insertOne');
+      
+      const result = await this.db.collection('team_chats').insertOne(message);
+
+      this.logger.success(`团队消息发送成功！消息ID: ${message.chat_id}`);
+
+      return {
+        success: true,
+        data: message
+      };
+
+    } catch (error) {
+      this.logger.error('发送团队消息失败:', error.message);
+      this.logger.error('错误详情:', error);
+      return {
+        success: false,
+        error: '发送失败',
+        details: error.message
+      };
+    }
+  }
+
+  /**
+   * ⭐ 获取团队聊天消息列表（从独立的 team_chats 集合）
+   */
+  async getTeamChatMessages({ project_id, page = 1, pageSize = 30 }) {
+    this.logger.info('开始获取团队聊天消息列表...');
+    this.logger.data('查询参数', { project_id, page, pageSize });
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回空列表');
+        return {
+          success: true,
+          data: {
+            messages: [],
+            total: 0,
+            page,
+            pageSize
+          }
+        };
+      }
+
+      // 构建查询条件（使用独立的 team_chats 集合）
+      const query = { 
+        project_id: project_id,
+        is_deleted: false
+      };
+
+      // 计算分页
+      const skip = (page - 1) * pageSize;
+
+      // 查询总数
+      const total = await this.db.collection('team_chats').countDocuments(query);
+
+      // 查询消息列表（按创建时间正序）
+      const messages = await this.db.collection('team_chats')
+        .find(query)
+        .sort({ created_at: 1 })
+        .skip(skip)
+        .limit(pageSize)
+        .toArray();
+
+      this.logger.success(`获取团队消息列表成功！共 ${total} 条消息`);
+
+      return {
+        success: true,
+        data: {
+          messages,
+          total,
+          page,
+          pageSize
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('获取团队消息列表失败:', error.message);
+      this.logger.error('错误详情:', error);
+      return {
+        success: false,
+        error: '获取失败',
+        details: error.message
+      };
+    }
+  }
+
+  /**
+   * ⭐ 删除团队聊天消息（从独立的 team_chats 集合）
+   */
+  async deleteTeamChatMessage({ message_id, uuid }) {
+    this.logger.info('开始删除团队聊天消息...');
+    this.logger.data('消息ID', message_id);
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟成功');
+        return {
+          success: true,
+          data: { message_id, deleted: true }
+        };
+      }
+
+      // 软删除：只标记为已删除，不真正删除（使用独立的 team_chats 集合）
+      const result = await this.db.collection('team_chats').updateOne(
+        { 
+          chat_id: message_id,
+          sender_uuid: uuid  // 确保只能删除自己发送的消息
+        },
+        { $set: { is_deleted: true } }
+      );
+
+      if (result.matchedCount === 0) {
+        this.logger.error('未找到指定的消息或无权限删除');
+        return {
+          success: false,
+          error: '消息不存在或无权限删除'
+        };
+      }
+
+      this.logger.success('团队消息删除成功');
+
+      return {
+        success: true,
+        data: { message_id, deleted: true }
+      };
+
+    } catch (error) {
+      this.logger.error('删除团队消息失败:', error.message);
+      this.logger.error('错误详情:', error);
+      return {
+        success: false,
+        error: '删除失败',
+        details: error.message
+      };
+    }
+  }
+
+  /**
    * 关闭数据库连接
    */
   async closeConnection() {
