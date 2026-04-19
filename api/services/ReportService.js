@@ -58,89 +58,45 @@ class ReportService {
         };
       }
       
-      // 并行查询多个数据源
-      const [teams, applications, messages] = await Promise.all([
-        // 团队信息
-        this.db.collection('teams').find(teamFilter).toArray(),
-        
-        // 审批申请统计
-        this.db.collection('applications').aggregate([
-          { $match: teamFilter },
-          {
-            $group: {
-              _id: null,
-              totalApplications: { $sum: 1 },
-              approvedCount: {
-                $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] }
-              },
-              pendingCount: {
-                $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
-              },
-              avgApprovalTime: {
-                $avg: {
-                  $cond: [
-                    { $and: [
-                      { $eq: ['$status', 'approved'] },
-                      { $ne: ['$approved_at', null] },
-                      { $ne: ['$created_at', null] }
-                    ]},
-                    { $divide: [
-                      { $subtract: ['$approved_at', '$created_at'] },
-                      3600000  // 转换为小时
-                    ]},
-                    null
-                  ]
-                }
-              }
-            }
-          }
-        ]).toArray(),
-        
+      // ⭐ 先获取团队列表，提取teamIds
+      const teams = await this.db.collection('teams').find(teamFilter).toArray();
+      const teamIds = teams.map(t => t._id.toString());
+      
+      // ⭐ 并行查询多个数据源
+      const [messages] = await Promise.all([
         // 今日消息数
         this.db.collection('team_chats').countDocuments({
-          project_id: { $in: (await this.db.collection('teams').find(teamFilter).project('_id').toArray()).map(t => t._id.toString()) },
+          project_id: { $in: teamIds },
           created_at: {
             $gte: new Date(new Date().setHours(0, 0, 0, 0))
           }
         })
       ]);
       
-      // 计算统计数据
-      const approvalStats = applications[0] || {
+      // ⭐ TODO: 审批统计数据（需要确认实际的审批集合名称）
+      // 目前返回模拟数据，等待确认正确的集合名后再实现
+      const approvalStats = {
         totalApplications: 0,
         approvedCount: 0,
         pendingCount: 0,
         avgApprovalTime: 0
       };
       
-      const approvalRate = approvalStats.totalApplications > 0
-        ? ((approvalStats.approvedCount / approvalStats.totalApplications) * 100).toFixed(1)
-        : 0;
-      
-      const onTimeRate = 85; // TODO: 实现按时处理率计算
+      const approvalRate = 0;
+      const onTimeRate = 0;
       
       // 生成预警信息
       const alerts = [];
       
-      if (approvalStats.pendingCount > 10) {
-        alerts.push(`待审批申请较多（${approvalStats.pendingCount}个），建议加快处理速度`);
-      }
-      
-      if (approvalStats.avgApprovalTime > 8) {
-        alerts.push(`平均审批时长${approvalStats.avgApprovalTime.toFixed(1)}小时，超过标准值（4小时）`);
-      }
-      
-      // 组装返回数据
+      // ⭐ 组装返回数据
       const result = {
         // 基本信息
         totalMembers: teams.reduce((sum, team) => sum + (team.members?.length || 0), 0),
         activeMembers: Math.floor(teams.reduce((sum, team) => sum + (team.members?.length || 0), 0) * 0.78), // TODO: 实现真实活跃度计算
         
-        // 审批统计
-        pendingApprovals: approvalStats.pendingCount,
-        avgApprovalTime: approvalStats.avgApprovalTime 
-          ? `${approvalStats.avgApprovalTime.toFixed(1)}h`
-          : 'N/A',
+        // 审批统计（暂时为0）
+        pendingApprovals: 0,
+        avgApprovalTime: 'N/A',
         
         approvalStats: {
           totalApplications: approvalStats.totalApplications,
