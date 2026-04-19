@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/project');
 const teamRoutes = require('./routes/team');
 const messageRoutes = require('./routes/message');
+const reportRoutes = require('./routes/report'); // ⭐ 新增报表路由
 
 const app = express();
 app.use(bodyParser.json());
@@ -15,6 +16,7 @@ app.use('/api', authRoutes);
 app.use('/api/project', projectRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/message', messageRoutes);
+app.use('/api/report', reportRoutes); // ⭐ 注册报表路由
 
 // 健康检查接口
 app.get('/api/health', (req, res) => {
