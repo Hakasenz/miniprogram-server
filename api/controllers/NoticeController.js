@@ -38,13 +38,15 @@ class NoticeController {
   // 创建通知
   async createNotice(req, res) {
     try {
-      const { title, content, type, targetRoles } = req.body;
-      const authorUuid = req.user ? req.user.uuid : null;  // 假设通过中间件解析JWT
+      const { title, content, type, targetRoles, uuid } = req.body;
+      
+      // 从请求体中获取用户UUID（与getNotices保持一致）
+      const authorUuid = uuid;
       
       if (!authorUuid) {
         return res.status(401).json({
           success: false,
-          error: '未授权访问'
+          error: '缺少用户UUID参数'
         });
       }
       
@@ -55,7 +57,7 @@ class NoticeController {
         });
       }
       
-      console.log('📝 创建通知:', title);
+      console.log('📝 创建通知:', title, '| 作者UUID:', authorUuid);
       
       const notice = await this.service.createNotice({
         title,
