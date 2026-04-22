@@ -54,6 +54,11 @@ router.post('/workflow/update', (req, res) => {
   projectController.updateWorkflowStep(req, res);
 });
 
+// ⭐ 标记项目为完成接口
+router.post('/mark-completed', (req, res) => {
+  projectController.markProjectAsCompleted(req, res);
+});
+
 // ⭐ 获取用户团队关系接口
 router.get('/team-relations', (req, res) => {
   projectController.getUserTeamRelations(req, res);

@@ -907,67 +907,59 @@ class ProjectController {
   }
 
   /**
-   * ⭐ 获取用户的团队关系（我创建的和加入的）
+   * ⭐ 标记项目为完成状态
+   * POST /api/project/mark-completed
    */
-  async getUserTeamRelations(req, res) {
-    const logger = new Logger('UserTeamRelationsAPI');
+  async markProjectAsCompleted(req, res) {
+    const logger = new Logger('ProjectController.markProjectAsCompleted');
     
-    logger.separator('收到获取用户团队关系请求');
-    logger.info(`请求时间: ${new Date().toISOString()}`);
-    
-    const { uuid } = req.query;
-    
+    logger.separator('收到标记项目为完成请求');
+    logger.info('API版本: v1.0 - 标记项目为完成状态');
+    logger.data('请求体', req.body);
+
+    const { project_id, uuid } = req.body;
+
     // 验证必需参数
-    if (!uuid) {
-      logger.error('缺少必需参数: uuid');
+    if (!project_id || !uuid) {
+      logger.error('缺少必需参数');
       return res.status(400).json({ 
         status: 'error',
-        message: '缺少用户UUID参数'
+        message: '缺少必需参数',
+        missing_fields: ['project_id', 'uuid']
       });
     }
-    
-    logger.info(`查询用户UUID: ${uuid}`);
-    
+
     try {
-      logger.info('开始调用项目服务...');
+      logger.info('开始调用服务层...');
       
-      // 调用项目服务获取团队关系
-      const result = await this.projectService.getUserTeamRelations(uuid);
-      logger.info('项目服务调用完成');
-      
+      const result = await this.projectService.markProjectAsCompleted(project_id, uuid);
+
       if (result.success) {
-        logger.success('获取团队关系成功');
-        logger.data('统计数据', result.data.stats);
-        
+        logger.success('项目标记为完成成功');
         res.json({
           status: 'success',
-          message: '获取团队关系成功',
+          message: '项目已标记为完成',
           data: result.data
         });
-        
-        logger.success('响应已发送给客户端');
       } else {
-        logger.error('获取团队关系失败');
-        logger.error('失败原因:', result.error);
-        
+        logger.error('项目标记为完成失败');
         res.status(400).json({
           status: 'error',
           message: result.error,
           details: result.details
         });
       }
-      
+
     } catch (err) {
       logger.error('服务器异常:', err.message);
-      logger.error('错误堆栈:', err.stack);
-      
-      res.status(500).json({
+      res.status(500).json({ 
         status: 'error',
-        message: '服务器内部错误',
+        message: '标记项目为完成时发生异常',
         details: err.message
       });
     }
   }
-}
 
-module.exports = ProjectController;
+  /**
+   * ⭐ 获取用户的团队关系（我创建的和加入的）
+   */

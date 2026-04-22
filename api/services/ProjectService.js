@@ -644,6 +644,17 @@ class ProjectService {
 
       this.logger.success(`找到项目：${project.name} (${project.project_id})`);
 
+      // ⭐ 检查项目是否已完成 - 已完成的项目禁止邀请新成员
+      if (project.status === 'completed') {
+        this.logger.warn(`项目 ${project.project_id} 已完成，禁止邀请新成员`);
+        return {
+          success: false,
+          error: '项目已完成',
+          code: 'PROJECT_COMPLETED',
+          details: ['该项目已标记为完成状态，无法再邀请新成员加入']
+        };
+      }
+
       // 4. 检查用户是否已是成员
       if (project.members && project.members.includes(userUuid)) {
         this.logger.warn(`用户 ${userUuid} 已是项目成员`);
@@ -1184,7 +1195,7 @@ class ProjectService {
         };
       }
 
-      // 先获取项目信息，用于发送通知
+      // ⭐ 先获取项目信息，检查项目状态
       const project = await this.db.collection('projects').findOne({ project_id });
       
       if (!project) {
@@ -1192,6 +1203,16 @@ class ProjectService {
         return {
           success: false,
           error: '项目不存在'
+        };
+      }
+
+      // ⭐ 检查项目是否已完成 - 已完成的项目禁止添加新流程
+      if (project.status === 'completed') {
+        this.logger.warn(`项目 ${project_id} 已完成，禁止添加新流程节点`);
+        return {
+          success: false,
+          error: '项目已完成',
+          details: ['该项目已标记为完成状态，无法再添加新的流程节点']
         };
       }
 
@@ -1238,7 +1259,7 @@ class ProjectService {
           submitter_uuid: submitter,
           leader_uuid: project.leader
         });
-        this.logger.success('流程提交通知已发送');
+        this.logger.success('流程提交流程通知已发送');
       }
 
       return {
@@ -1353,6 +1374,135 @@ class ProjectService {
       return {
         success: false,
         error: '更新失败',
+        details: error.message
+      };
+    }
+  }
+
+  /**
+   * ⭐ 标记项目为完成状态
+   * @param {string} projectId - 项目ID
+   * @param {string} userUuid - 操作用户UUID
+   * @returns {Promise<Object>} 更新结果
+   */
+  async markProjectAsCompleted(projectId, userUuid) {
+    this.logger.startFlow('标记项目为完成');
+    this.logger.info(`项目ID: ${projectId}, 操作用户: ${userUuid}`);
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，返回模拟成功');
+        return {
+          success: true,
+          data: { 
+            project_id: projectId,
+            status: 'completed',
+            updated_at: new Date().toISOString(),
+            message: '模拟更新成功'
+          }
+        };
+      }
+
+      // 验证参数
+      if (!projectId || !userUuid) {
+        this.logger.error('缺少必需参数');
+        return {
+          success: false,
+          error: '缺少必需参数',
+          details: ['项目ID和用户UUID不能为空']
+        };
+      }
+
+      // 检查项目是否存在
+      this.logger.step(1, '检查项目是否存在');
+      const existingProject = await this.db.collection('projects').findOne({ 
+        project_id: projectId 
+      });
+
+      if (!existingProject) {
+        this.logger.error(`项目不存在: ${projectId}`);
+        return {
+          success: false,
+          error: '项目不存在',
+          details: [`找不到项目ID为 ${projectId} 的项目`]
+        };
+      }
+
+      // 检查权限 - 只有项目负责人或创建者可以标记为完成
+      this.logger.step(2, '验证操作权限');
+      if (existingProject.leader !== userUuid) {
+        // 也允许管理员操作
+        const user = await this.db.collection('users').findOne({ uuid: userUuid });
+        if (!user || !(user.system_roles && user.system_roles.includes('admin'))) {
+          this.logger.error(`权限不足 - 用户 ${userUuid} 不能标记项目 ${projectId} 为完成`);
+          return {
+            success: false,
+            error: '权限不足',
+            details: ['只有项目负责人或管理员可以标记项目为完成']
+          };
+        }
+      }
+
+      this.logger.info(`权限验证通过，用户 ${userUuid} 可以标记项目为完成`);
+
+      // 更新项目状态为完成
+      this.logger.step(3, '更新项目状态为完成');
+      const updateResult = await this.db.collection('projects').updateOne(
+        { project_id: projectId },
+        { 
+          $set: { 
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        }
+      );
+
+      if (updateResult.matchedCount === 0) {
+        this.logger.error('更新失败：没有找到匹配的项目');
+        return {
+          success: false,
+          error: '更新失败',
+          details: ['没有找到要更新的项目']
+        };
+      }
+
+      // 获取更新后的项目数据
+      const updatedProject = await this.db.collection('projects').findOne({ 
+        project_id: projectId 
+      });
+
+      this.logger.success(`项目标记为完成成功！项目ID: ${projectId}`);
+      this.logger.info(`新状态: ${updatedProject.status}`);
+      
+      // 发送项目完成通知
+      this.logger.info('发送项目完成通知...');
+      await this.messageService.sendProjectCompletionNotification({
+        project_id: projectId,
+        project_name: updatedProject.name || '未知项目',
+        completed_by: userUuid,
+        members: updatedProject.members || []
+      });
+      this.logger.success('项目完成通知已发送');
+
+      return {
+        success: true,
+        data: {
+          project_id: projectId,
+          status: 'completed',
+          completed_at: updatedProject.completed_at,
+          updated_at: updatedProject.updated_at
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('标记项目为完成失败:', error.message);
+      this.logger.error('错误详情:', error);
+      return {
+        success: false,
+        error: '操作失败',
         details: error.message
       };
     }
