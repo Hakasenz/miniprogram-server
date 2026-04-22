@@ -26,8 +26,20 @@ class ProjectService {
     if (!this.db && this.MONGODB_URI) {
       try {
         this.logger.database('CONNECT', '正在连接到 MongoDB Atlas...');
-        this.mongoClient = new MongoClient(this.MONGODB_URI);
-        await this.mongoClient.connect();
+        this.mongoClient = new MongoClient(this.MONGODB_URI, {
+          serverSelectionTimeoutMS: 5000, // ⭐ 设置服务器选择超时为5秒
+          connectTimeoutMS: 5000,         // ⭐ 设置连接超时为5秒
+          socketTimeoutMS: 10000          // ⭐ 设置socket超时为10秒
+        });
+        
+        // ⭐ 添加超时保护
+        const connectPromise = this.mongoClient.connect();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('数据库连接超时（5秒）')), 5000);
+        });
+        
+        await Promise.race([connectPromise, timeoutPromise]);
+        
         this.db = this.mongoClient.db(this.DATABASE_NAME);
         this.logger.success(`MongoDB 连接成功！数据库: ${this.DATABASE_NAME}`);
         
@@ -37,6 +49,14 @@ class ProjectService {
       } catch (error) {
         this.logger.error('MongoDB 连接失败:', error.message);
         this.logger.error('错误详情:', error);
+        
+        // ⭐ 如果是超时错误，提供更明确的提示
+        if (error.message.includes('超时') || error.name === 'MongoServerSelectionError') {
+          this.logger.error('⚠️ 可能的原因：');
+          this.logger.error('   1. MongoDB Atlas IP白名单未配置Vercel的IP地址');
+          this.logger.error('   2. 网络连接问题');
+          this.logger.error('   3. 数据库连接字符串错误');
+        }
       }
     } else if (this.db) {
       this.logger.success('数据库连接已存在，跳过初始化');
