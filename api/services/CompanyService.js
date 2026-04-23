@@ -168,10 +168,14 @@ class CompanyService {
         };
       }
 
-      // ⭐ 检查用户是否已经加入其他组织
+      // ⭐ 检查用户是否已经加入其他组织（严格排除空字符串）
       const existingUser = await this.db.collection('users').findOne({ 
         uuid: user_uuid,
-        company_id: { $exists: true, $ne: null }
+        company_id: { 
+          $exists: true, 
+          $ne: null,
+          $ne: ''  // ⭐ 排除空字符串
+        }
       });
 
       if (existingUser) {
@@ -243,10 +247,14 @@ class CompanyService {
         };
       }
 
-      // ⭐ 检查用户是否已加入其他组织
+      // ⭐ 检查用户是否已加入其他组织（严格排除空字符串）
       const existingUser = await this.db.collection('users').findOne({ 
         uuid: creator_uuid,
-        company_id: { $exists: true, $ne: null }
+        company_id: { 
+          $exists: true, 
+          $ne: null,
+          $ne: ''  // ⭐ 排除空字符串
+        }
       });
 
       if (existingUser) {
@@ -351,10 +359,14 @@ class CompanyService {
         };
       }
 
-      // ⭐ 检查用户是否已加入其他组织
+      // ⭐ 检查用户是否已加入其他组织（严格排除空字符串）
       const existingUser = await this.db.collection('users').findOne({ 
         uuid: applicant_uuid,
-        company_id: { $exists: true, $ne: null }
+        company_id: { 
+          $exists: true, 
+          $ne: null,
+          $ne: ''  // ⭐ 排除空字符串
+        }
       });
 
       if (existingUser) {
