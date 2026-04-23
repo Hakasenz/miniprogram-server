@@ -83,8 +83,8 @@ class CompanyService {
 
       const companyId = user.company_id;
 
-      // 如果 company_id 为空，返回空结果
-      if (!companyId) {
+      // ⭐ 严格判断 company_id 是否为空（包括 null、undefined、空字符串）
+      if (!companyId || companyId === '' || companyId === null || companyId === undefined) {
         this.logger.info('用户尚未加入任何组织');
         return {
           success: true,
