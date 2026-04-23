@@ -1,9 +1,11 @@
 const ProjectService = require('../services/ProjectService');
+const AttachmentService = require('../services/AttachmentService');  // ⭐ 引入附件服务
 const Logger = require('../utils/Logger');
 
 class ProjectController {
   constructor() {
     this.projectService = new ProjectService();
+    this.attachmentService = new AttachmentService();  // ⭐ 初始化附件服务
   }
 
   /**
@@ -955,6 +957,148 @@ class ProjectController {
       res.status(500).json({ 
         status: 'error',
         message: '标记项目为完成时发生异常',
+        details: err.message
+      });
+    }
+  }
+
+  /**
+   * ⭐ 上传附件接口（二进制存储到 MongoDB）
+   */
+  async uploadAttachment(req, res) {
+    const logger = new Logger('ProjectController.uploadAttachment');
+    
+    logger.separator('收到附件上传请求');
+    logger.info('开始处理附件上传...');
+    logger.data('请求体大小', req.body ? Buffer.byteLength(JSON.stringify(req.body)) : 0);
+
+    try {
+      const { file_data, file_name, file_type, project_id, step_id, uploader_uuid } = req.body;
+
+      // 验证必需参数
+      if (!file_data || !file_name || !file_type || !project_id || !uploader_uuid) {
+        logger.error('缺少必需参数');
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少必需参数',
+          required: ['file_data', 'file_name', 'file_type', 'project_id', 'uploader_uuid']
+        });
+      }
+
+      // 验证文件类型
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!allowedTypes.includes(file_type)) {
+        logger.error(`不支持的文件类型: ${file_type}`);
+        return res.status(400).json({
+          status: 'error',
+          message: '不支持的文件类型，仅支持 PNG、JPG、PDF、DOC、DOCX'
+        });
+      }
+
+      // 验证文件大小（限制为 10MB）
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (Buffer.byteLength(file_data, 'base64') > maxSize) {
+        logger.error('文件大小超过限制');
+        return res.status(400).json({
+          status: 'error',
+          message: '文件大小不能超过 10MB'
+        });
+      }
+
+      logger.info('调用附件服务上传附件...');
+      // ⭐ 调用 AttachmentService
+      const result = await this.attachmentService.uploadAttachment({
+        file_data,
+        file_name,
+        file_type,
+        project_id,
+        step_id: step_id || null,
+        uploader_uuid
+      });
+
+      if (result.success) {
+        logger.success('附件上传成功');
+        logger.data('文件哈希', result.data.file_hash);
+        
+        res.json({
+          status: 'success',
+          message: '附件上传成功',
+          data: {
+            file_hash: result.data.file_hash,
+            file_name: result.data.file_name,
+            file_type: result.data.file_type,
+            file_size: result.data.file_size
+          }
+        });
+      } else {
+        logger.error('附件上传失败:', result.error);
+        res.status(400).json({
+          status: 'error',
+          message: result.error || '附件上传失败',
+          details: result.details
+        });
+      }
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      res.status(500).json({
+        status: 'error',
+        message: '上传附件时发生异常',
+        details: err.message
+      });
+    }
+  }
+
+  /**
+   * ⭐ 获取附件接口（通过哈希值）
+   */
+  async getAttachment(req, res) {
+    const logger = new Logger('ProjectController.getAttachment');
+    
+    const { fileHash } = req.params;
+    
+    logger.separator('收到附件获取请求');
+    logger.info(`文件哈希: ${fileHash}`);
+
+    try {
+      if (!fileHash) {
+        logger.error('缺少文件哈希参数');
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少文件哈希参数'
+        });
+      }
+
+      logger.info('调用附件服务获取附件...');
+      // ⭐ 调用 AttachmentService
+      const result = await this.attachmentService.getAttachment(fileHash);
+
+      if (result.success) {
+        logger.success('附件获取成功');
+        
+        // 设置响应头，让浏览器正确识别文件类型
+        res.set({
+          'Content-Type': result.data.file_type,
+          'Content-Disposition': `inline; filename="${encodeURIComponent(result.data.file_name)}"`,
+          'Cache-Control': 'public, max-age=31536000' // 缓存1年
+        });
+
+        // 返回二进制数据
+        res.send(Buffer.from(result.data.file_data, 'base64'));
+      } else {
+        logger.error('附件获取失败:', result.error);
+        res.status(404).json({
+          status: 'error',
+          message: result.error || '附件不存在'
+        });
+      }
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      res.status(500).json({
+        status: 'error',
+        message: '获取附件时发生异常',
         details: err.message
       });
     }

@@ -1192,7 +1192,7 @@ class ProjectService {
   /**
    * ⭐ 添加流程节点
    */
-  async addWorkflowStep({ project_id, action, submitter, status = 'pending' }) {
+  async addWorkflowStep({ project_id, action, submitter, status = 'pending', data = {} }) {
     this.logger.info('开始添加流程节点...');
     this.logger.data('流程节点数据', { project_id, action, submitter, status });
 
@@ -1236,14 +1236,16 @@ class ProjectService {
         };
       }
 
-      // 创建新的流程节点
+      // 创建新的流程节点 - ⭐ 支持扩展字段
       const newStep = {
         step_id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        action,
+        action,  // 流程名称
+        description: data.description || '',  // ⭐ 内容描述
         submitter,
         status,
         submit_time: new Date().toISOString(),
-        update_time: null
+        update_time: null,
+        attachments: data.attachments || []  // ⭐ 附件哈希数组（存储 file_hash）
       };
 
       this.logger.database('UPDATE', 'db.projects.updateOne - $push workflow');
@@ -1497,15 +1499,24 @@ class ProjectService {
       this.logger.success(`项目标记为完成成功！项目ID: ${projectId}`);
       this.logger.info(`新状态: ${updatedProject.status}`);
       
-      // 发送项目完成通知
-      this.logger.info('发送项目完成通知...');
-      await this.messageService.sendProjectCompletionNotification({
-        project_id: projectId,
-        project_name: updatedProject.name || '未知项目',
-        completed_by: userUuid,
-        members: updatedProject.members || []
-      });
-      this.logger.success('项目完成通知已发送');
+      // ⭐ 发送项目完成通知（非阻塞，失败不影响主流程）
+      try {
+        this.logger.info('发送项目完成通知...');
+        const notificationResult = await this.messageService.sendProjectCompletionNotification({
+          project_id: projectId,
+          project_name: updatedProject.name || '未知项目',
+          completed_by: userUuid,
+          members: updatedProject.members || []
+        });
+        
+        if (notificationResult.success) {
+          this.logger.success('项目完成通知已发送');
+        } else {
+          this.logger.warn('项目完成通知发送失败，但不影响主流程:', notificationResult.error);
+        }
+      } catch (notificationError) {
+        this.logger.error('发送项目完成通知时发生异常，但不影响主流程:', notificationError.message);
+      }
 
       return {
         success: true,

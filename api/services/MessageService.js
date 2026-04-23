@@ -594,6 +594,71 @@ class MessageService {
   }
 
   /**
+   * ⭐ 发送项目完成通知给所有成员
+   */
+  async sendProjectCompletionNotification({ project_id, project_name, completed_by, members }) {
+    this.logger.info('发送项目完成通知...');
+    this.logger.data('通知数据', { project_id, project_name, completed_by, members_count: members?.length || 0 });
+
+    try {
+      await this.initDatabase();
+
+      if (!this.db) {
+        this.logger.warn('数据库未连接，跳过发送通知');
+        return { success: true, message: '模拟发送成功' };
+      }
+
+      // 获取完成者信息
+      const completer = await this.db.collection('users').findOne({ uuid: completed_by });
+      const completerName = completer?.name || completed_by;
+
+      // 为每个成员创建通知（排除完成者自己）
+      const notifications = [];
+      for (const memberUuid of (members || [])) {
+        // 不给自己发送通知
+        if (memberUuid === completed_by) {
+          continue;
+        }
+
+        const message = {
+          message_id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'project_completed',
+          title: '项目已完成',
+          content: `项目"${project_name}"已被${completerName}标记为完成`,
+          project_id,
+          project_name,
+          sender_uuid: completed_by,
+          receiver_uuid: memberUuid,
+          is_read: false,
+          created_at: new Date().toISOString()
+        };
+
+        await this.db.collection('messages').insertOne(message);
+        notifications.push(message);
+      }
+
+      this.logger.success(`项目完成通知已发送给 ${notifications.length} 个成员`);
+      return {
+        success: true,
+        data: {
+          sent_count: notifications.length,
+          notifications
+        }
+      };
+
+    } catch (error) {
+      this.logger.error('发送项目完成通知失败:', error.message);
+      this.logger.error('错误详情:', error);
+      // ⭐ 通知失败不影响主流程，返回成功但记录错误
+      return {
+        success: true,
+        warning: '通知发送失败，但项目状态已更新',
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * 关闭数据库连接
    */
   async closeConnection() {

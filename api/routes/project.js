@@ -49,6 +49,16 @@ router.post('/workflow/add', (req, res) => {
   projectController.addWorkflowStep(req, res);
 });
 
+// ⭐ 上传附件接口（二进制存储）
+router.post('/upload-attachment', (req, res) => {
+  projectController.uploadAttachment(req, res);
+});
+
+// ⭐ 获取附件接口（通过哈希）
+router.get('/get-attachment/:fileHash', (req, res) => {
+  projectController.getAttachment(req, res);
+});
+
 // ⭐ 更新流程节点状态接口
 router.post('/workflow/update', (req, res) => {
   projectController.updateWorkflowStep(req, res);
