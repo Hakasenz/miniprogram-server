@@ -1104,6 +1104,55 @@ class ProjectController {
     }
   }
 
+  /**
+   * ⭐ 获取用户团队关系（创建的和加入的）
+   */
+  async getUserTeamRelations(req, res) {
+    const logger = new Logger('ProjectController.getUserTeamRelations');
+    
+    logger.separator('收到获取团队关系请求');
+    logger.info('开始处理...');
+
+    try {
+      const { uuid } = req.query;
+
+      if (!uuid) {
+        logger.error('缺少用户UUID参数');
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少用户UUID参数'
+        });
+      }
+
+      logger.info(`查询用户团队关系: ${uuid}`);
+      const result = await this.projectService.getUserTeamRelations(uuid);
+
+      if (result.success) {
+        logger.success('获取团队关系成功');
+        res.json({
+          status: 'success',
+          data: result.data
+        });
+      } else {
+        logger.error('获取团队关系失败:', result.error);
+        res.status(400).json({
+          status: 'error',
+          message: result.error || '获取团队关系失败',
+          details: result.details
+        });
+      }
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      res.status(500).json({
+        status: 'error',
+        message: '获取团队关系时发生异常',
+        details: err.message
+      });
+    }
+  }
+
 }
 
 module.exports = ProjectController; 

@@ -312,6 +312,55 @@ class CompanyController {
       });
     }
   }
+
+  /**
+   * ⭐ 退出组织
+   */
+  async leaveCompany(req, res) {
+    const logger = new Logger('CompanyController.leaveCompany');
+    
+    logger.separator('收到退出组织请求');
+    logger.info('开始处理...');
+
+    try {
+      const { user_uuid } = req.body;
+
+      if (!user_uuid) {
+        logger.error('缺少用户UUID参数');
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少用户UUID参数'
+        });
+      }
+
+      logger.info(`用户退出组织: ${user_uuid}`);
+      const result = await this.companyService.leaveCompany(user_uuid);
+
+      if (result.success) {
+        logger.success('退出组织成功');
+        res.json({
+          status: 'success',
+          message: result.message || '已成功退出组织'
+        });
+      } else {
+        logger.error('退出组织失败:', result.error);
+        res.status(400).json({
+          status: 'error',
+          message: result.error || '退出组织失败',
+          details: result.details
+        });
+      }
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      res.status(500).json({
+        status: 'error',
+        message: '退出组织时发生异常',
+        details: err.message
+      });
+    }
+  }
 }
 
 module.exports = CompanyController;
