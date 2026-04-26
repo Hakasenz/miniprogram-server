@@ -19,4 +19,14 @@ router.post('/update-permissions', (req, res) => {
   authController.updatePermissions(req, res);
 });
 
+// ⭐ 获取同组织成员列表（人事管理用）
+router.post('/org-members', (req, res) => {
+  authController.getOrganizationMembers(req, res);
+});
+
+// ⭐ 更新成员信息（rank和position）
+router.post('/update-member-info', (req, res) => {
+  authController.updateMemberInfo(req, res);
+});
+
 module.exports = router;

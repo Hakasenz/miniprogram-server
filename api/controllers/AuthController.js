@@ -217,6 +217,163 @@ class AuthController {
       });
     }
   }
+
+  /**
+   * ⭐ 获取同组织成员列表（人事管理用）
+   */
+  async getOrganizationMembers(req, res) {
+    const logger = new Logger('AuthController.getOrganizationMembers');
+    
+    logger.separator('收到获取组织成员请求');
+    logger.info('开始处理...');
+
+    try {
+      const { company_id } = req.body;
+
+      if (!company_id) {
+        logger.error('缺少公司ID参数');
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少 company_id 参数'
+        });
+      }
+
+      logger.info(`查询组织成员: ${company_id}`);
+      
+      await this.initDatabase();
+
+      if (!this.db) {
+        return res.status(500).json({
+          status: 'error',
+          message: '数据库连接失败'
+        });
+      }
+
+      // 查询同一组织的所有用户
+      const members = await this.db.collection('users')
+        .find({ 
+          company_id: company_id,
+          uuid: { $ne: '' }  // 排除空UUID
+        })
+        .project({
+          uuid: 1,
+          username: 1,
+          wechat_name: 1,
+          avatar_url: 1,
+          rank: 1,
+          position: 1,
+          gender: 1,
+          company_id: 1
+        })
+        .toArray();
+
+      logger.success(`获取到 ${members.length} 个组织成员`);
+
+      res.json({
+        status: 'success',
+        data: {
+          members: members
+        }
+      });
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      res.status(500).json({
+        status: 'error',
+        message: '获取组织成员时发生异常',
+        details: err.message
+      });
+    }
+  }
+
+  /**
+   * ⭐ 更新成员信息（rank和position）
+   */
+  async updateMemberInfo(req, res) {
+    const logger = new Logger('AuthController.updateMemberInfo');
+    
+    logger.separator('收到更新成员信息请求');
+    logger.info('开始处理...');
+
+    try {
+      const { target_uuid, rank, position } = req.body;
+
+      if (!target_uuid) {
+        logger.error('缺少目标用户UUID参数');
+        return res.status(400).json({
+          status: 'error',
+          message: '缺少 target_uuid 参数'
+        });
+      }
+
+      logger.info(`更新用户信息: ${target_uuid}`, { rank, position });
+      
+      await this.initDatabase();
+
+      if (!this.db) {
+        return res.status(500).json({
+          status: 'error',
+          message: '数据库连接失败'
+        });
+      }
+
+      // 构建更新字段
+      const updateFields = {};
+      if (rank !== undefined && rank !== null) {
+        updateFields.rank = parseInt(rank);
+      }
+      if (position !== undefined && position !== null) {
+        updateFields.position = String(position);
+      }
+      updateFields.updated_at = new Date().toISOString();
+
+      // 更新用户信息
+      const result = await this.db.collection('users').updateOne(
+        { uuid: target_uuid },
+        { $set: updateFields }
+      );
+
+      if (result.matchedCount === 0) {
+        logger.warn('用户不存在');
+        return res.status(404).json({
+          status: 'error',
+          message: '用户不存在'
+        });
+      }
+
+      logger.success('用户信息更新成功');
+
+      // 获取更新后的用户信息
+      const updatedUser = await this.db.collection('users').findOne(
+        { uuid: target_uuid },
+        {
+          projection: {
+            uuid: 1,
+            username: 1,
+            rank: 1,
+            position: 1,
+            updated_at: 1
+          }
+        }
+      );
+
+      res.json({
+        status: 'success',
+        message: '更新成功',
+        data: updatedUser
+      });
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      res.status(500).json({
+        status: 'error',
+        message: '更新成员信息时发生异常',
+        details: err.message
+      });
+    }
+  }
 }
 
 module.exports = AuthController;
