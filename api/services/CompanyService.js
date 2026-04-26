@@ -660,9 +660,14 @@ class CompanyService {
             }
           },
           {
+            $addFields: {
+              company_id_obj: { $toObjectId: '$company_id' }  // ⭐ 将字符串转换为ObjectId
+            }
+          },
+          {
             $lookup: {
               from: 'companies',
-              localField: 'company_id',
+              localField: 'company_id_obj',  // ⭐ 使用转换后的ObjectId
               foreignField: '_id',
               as: 'company_info'
             }
