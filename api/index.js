@@ -14,7 +14,7 @@ const app = express();
 app.use(bodyParser.json());
 
 // 使用路由
-app.use('/api', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/project', projectRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/message', messageRoutes);
