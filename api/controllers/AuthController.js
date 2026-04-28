@@ -102,6 +102,84 @@ class AuthController {
   }
 
   /**
+   * ⭐ 获取用户详细信息（包含权限信息）
+   */
+  async getUserInfo(req, res) {
+    const logger = new Logger('AuthController.getUserInfo');
+    
+    logger.separator('收到获取用户信息请求');
+    logger.info('开始处理...');
+
+    try {
+      const { uuid } = req.query;
+
+      if (!uuid) {
+        logger.error('缺少uuid参数');
+        return res.status(400).json({
+          success: false,
+          error: '缺少uuid参数'
+        });
+      }
+
+      logger.info(`查询用户信息: ${uuid}`);
+      
+      await this.initDatabase();
+
+      if (!this.db) {
+        return res.status(500).json({
+          success: false,
+          error: '数据库连接失败'
+        });
+      }
+
+      // 查询用户信息
+      const user = await this.db.collection('users').findOne(
+        { uuid: uuid },
+        { 
+          projection: {
+            uuid: 1,
+            username: 1,
+            nickname: 1,
+            avatar_url: 1,
+            rank: 1,
+            position: 1,
+            system_roles: 1,
+            company_id: 1,
+            managed_team_ids: 1,
+            joined_team_ids: 1,
+            created_at: 1,
+            updated_at: 1
+          }
+        }
+      );
+
+      if (!user) {
+        logger.warn(`用户不存在: ${uuid}`);
+        return res.status(404).json({
+          success: false,
+          error: '用户不存在'
+        });
+      }
+
+      logger.success('获取用户信息成功');
+
+      res.json({
+        success: true,
+        data: user
+      });
+
+    } catch (err) {
+      logger.error('服务器异常:', err.message);
+      logger.error('错误堆栈:', err.stack);
+      res.status(500).json({
+        success: false,
+        error: '获取用户信息时发生异常',
+        details: err.message
+      });
+    }
+  }
+
+  /**
    * ⭐ 更新用户权限（临时权限设置）
    */
   async updatePermissions(req, res) {
